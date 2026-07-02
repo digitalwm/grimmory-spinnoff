@@ -90,7 +90,12 @@ export class BookdropFileReviewComponent implements OnInit {
   saving = false;
   includeCoversOnCopy = true;
 
-  pageSize = 50;
+  pageSize = 150;
+  pageSizeOptions = [
+    {label: '50', value: 50},
+    {label: '100', value: 100},
+    {label: '150', value: 150},
+  ];
   totalRecords = 0;
   currentPage = 0;
 
@@ -338,9 +343,7 @@ export class BookdropFileReviewComponent implements OnInit {
 
   selectAll(selected: boolean): void {
     if (selected) {
-      this.selectAllAcrossPages = true;
-      this.excludedFiles.clear();
-      Object.values(this.fileUiCache).forEach(file => file.selected = true);
+      this.selectAllAcrossPages = false;
       this.bookdropFileUis.forEach(file => file.selected = true);
     } else {
       this.selectAllAcrossPages = false;
@@ -348,6 +351,19 @@ export class BookdropFileReviewComponent implements OnInit {
       Object.values(this.fileUiCache).forEach(file => file.selected = false);
       this.bookdropFileUis.forEach(file => file.selected = false);
     }
+  }
+
+  selectAllPages(): void {
+    this.selectAllAcrossPages = true;
+    this.excludedFiles.clear();
+    Object.values(this.fileUiCache).forEach(file => file.selected = true);
+    this.bookdropFileUis.forEach(file => file.selected = true);
+  }
+
+  onPageSizeChange(): void {
+    this.selectAllAcrossPages = false;
+    this.excludedFiles.clear();
+    this.loadPage(0);
   }
 
   toggleFileSelection(fileId: number, selected: boolean): void {
@@ -553,15 +569,33 @@ export class BookdropFileReviewComponent implements OnInit {
 
         this.dialogLauncherService.openBookdropFinalizeResultDialog(result);
 
-        const finalizedIds = new Set(files.map(f => f.fileId));
-        Object.keys(this.fileUiCache).forEach(idStr => {
-          const id = Number(idStr);
-          if (finalizedIds.has(id)) delete this.fileUiCache[id];
-        });
+        const failedIds = new Set(result.results
+          .filter(r => !r.success && r.fileId != null)
+          .map(r => r.fileId!));
+        const successfulIds = new Set(result.results
+          .filter(r => r.success && r.fileId != null)
+          .map(r => r.fileId!));
+
+        successfulIds.forEach(id => delete this.fileUiCache[id]);
 
         this.selectAllAcrossPages = false;
         this.excludedFiles.clear();
-        this.loadPage(this.currentPage);
+
+        if (failedIds.size > 0) {
+          this.bookdropFileUis = this.bookdropFileUis
+            .filter(fileUi => !successfulIds.has(fileUi.file.id))
+            .map(fileUi => {
+              if (failedIds.has(fileUi.file.id)) {
+                fileUi.selected = true;
+                this.fileUiCache[fileUi.file.id] = fileUi;
+              }
+              return fileUi;
+            });
+          this.totalRecords = Math.max(0, this.totalRecords - successfulIds.size);
+          this.bookdropFileUis.forEach(fileUi => this.fileUiCache[fileUi.file.id] = fileUi);
+        } else {
+          this.loadPage(this.currentPage);
+        }
       },
       error: (err) => {
         console.error('Error finalizing import:', err);

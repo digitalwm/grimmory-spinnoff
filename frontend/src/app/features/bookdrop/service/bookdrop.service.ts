@@ -36,6 +36,7 @@ export interface BookdropFile {
 }
 
 export interface BookdropFileResult {
+  fileId?: number;
   fileName: string;
   success: boolean;
   message: string;

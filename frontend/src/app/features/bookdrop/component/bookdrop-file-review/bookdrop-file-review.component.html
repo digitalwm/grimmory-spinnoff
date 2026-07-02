@@ -281,15 +281,36 @@
               <span class="selected-count-label" [pTooltip]="t('selectedCountTooltip')" tooltipPosition="top">{{ selectedCount }}</span>
             </p-inputgroup-addon>
             <p-button
-              [label]="t('selectAll')"
+              [label]="t('selectPage')"
               icon="pi pi-check-square"
               severity="info"
               (click)="selectAll(true)"
               outlined
-              [pTooltip]="t('selectAllTooltip')"
+              [pTooltip]="t('selectPageTooltip')"
               tooltipPosition="top">
             </p-button>
           </p-inputgroup>
+
+          <p-button
+            [label]="t('selectAll')"
+            icon="pi pi-list-check"
+            severity="info"
+            (click)="selectAllPages()"
+            outlined
+            [pTooltip]="t('selectAllTooltip')"
+            tooltipPosition="top">
+          </p-button>
+
+          <p-select
+            size="small"
+            [options]="pageSizeOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="pageSize"
+            (onChange)="onPageSizeChange()"
+            [pTooltip]="t('pageSizeTooltip')"
+            tooltipPosition="top">
+          </p-select>
 
           <p-button
             [label]="t('clear')"

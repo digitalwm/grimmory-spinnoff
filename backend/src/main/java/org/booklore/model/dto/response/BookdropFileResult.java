@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class BookdropFileResult {
+    private Long fileId;
     private String fileName;
     private boolean success;
     private String message;

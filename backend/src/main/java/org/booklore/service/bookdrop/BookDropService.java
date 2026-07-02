@@ -38,7 +38,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -86,11 +88,20 @@ public class BookDropService {
     }
 
     public Page<BookdropFile> getFilesByStatus(String status, Pageable pageable) {
+        Pageable stablePageable = withStableBookdropSort(pageable);
         if ("pending".equalsIgnoreCase(status)) {
-            return bookdropFileRepository.findAllByStatus(BookdropFileEntity.Status.PENDING_REVIEW, pageable).map(mapper::toDto);
+            return bookdropFileRepository.findAllByStatus(BookdropFileEntity.Status.PENDING_REVIEW, stablePageable).map(mapper::toDto);
         } else {
-            return bookdropFileRepository.findAll(pageable).map(mapper::toDto);
+            return bookdropFileRepository.findAll(stablePageable).map(mapper::toDto);
         }
+    }
+
+    private Pageable withStableBookdropSort(Pageable pageable) {
+        if (pageable.getSort().isSorted()) {
+            return pageable;
+        }
+        Sort sort = Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("id"));
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 
     public Resource getBookdropCover(long bookdropId) {
@@ -242,6 +253,7 @@ public class BookDropService {
                     BookdropFileEntity file = fileMap.get(id);
                     if (file == null) {
                         log.warn("File ID {} missing in DB during finalizeImport chunk processing", id);
+                        results.getResults().add(failureResult(id, "Unknown file", "File was not found in the Bookdrop review list"));
                         failedCount.incrementAndGet();
                         totalFilesProcessed.incrementAndGet();
                         continue;
@@ -337,6 +349,7 @@ public class BookDropService {
             String msg = String.format("Error finalizing file [id=%s, name=%s]: %s", fileEntity.getId(), fileEntity.getFileName(), e.getMessage());
             log.error(msg, e);
             notificationService.sendMessage(Topic.LOG, msg);
+            results.getResults().add(failureResult(fileEntity.getId(), fileEntity.getFileName(), e.getMessage()));
         }
     }
 
@@ -385,7 +398,7 @@ public class BookDropService {
                 .orElseThrow(() -> ApiError.INVALID_FILE_FORMAT.createException("Unsupported file extension"));
 
         if (!isFormatAllowed(library, fileType)) {
-            return failureResult(bookdropFile.getFileName(),
+            return failureResult(bookdropFile.getId(), bookdropFile.getFileName(),
                     "Format '" + fileType.name() + "' is not allowed in library '" + library.getName() + "'");
         }
 
@@ -400,12 +413,12 @@ public class BookDropService {
             bookdropFileRepository.deleteById(bookdropFile.getId());
             log.warn("Source file [id={}] not found at '{}'. Deleting entry from DB.", bookdropFile.getId(), source);
             bookdropNotificationService.sendBookdropFileSummaryNotification();
-            return failureResult(targetFile.getName(), "Source file does not exist in bookdrop folder");
+            return failureResult(bookdropFile.getId(), targetFile.getName(), "Source file does not exist in bookdrop folder");
         }
 
         if (targetFile.exists()) {
             log.warn("Target file already exists: id={}, name={}, target={}", bookdropFile.getId(), bookdropFile.getFileName(), target);
-            return failureResult(targetFile.getName(), "File already exists in the library '" + library.getName() + "'");
+            return failureResult(bookdropFile.getId(), targetFile.getName(), "File already exists in the library '" + library.getName() + "'");
         }
 
         return performFileMove(bookdropFile, source, target, library, path, metadata);
@@ -430,7 +443,7 @@ public class BookDropService {
                 result = processMovedFile(bookdropFile, target.toFile(), library, path, metadata);
             } catch (Exception e) {
                 cleanupTargetFile(target, bookdropFile.getId(), "processing exception");
-                return failureResult(bookdropFile.getFileName(), "Processing failed: " + e.getMessage());
+                return failureResult(bookdropFile.getId(), bookdropFile.getFileName(), "Processing failed: " + e.getMessage());
             }
 
             if (result.isSuccess()) {
@@ -449,7 +462,7 @@ public class BookDropService {
         } catch (Exception e) {
             log.error("Failed to move file id={}, name={} from '{}' to '{}': {}", bookdropFile.getId(), bookdropFile.getFileName(), source, target, e.getMessage(), e);
             cleanupFailedMove(target);
-            return failureResult(bookdropFile.getFileName(), "Failed to move file: " + e.getMessage());
+            return failureResult(bookdropFile.getId(), bookdropFile.getFileName(), "Failed to move file: " + e.getMessage());
         }
     }
 
@@ -494,6 +507,7 @@ public class BookDropService {
         log.info("File import completed: id={}, name={}, library={}, path={}", bookdropFile.getId(), targetFile.getName(), library.getName(), path.getPath());
 
         return BookdropFileResult.builder()
+                .fileId(bookdropFile.getId())
                 .fileName(targetFile.getName())
                 .message("File successfully imported into the '" + library.getName() + "' library from the Bookdrop folder")
                 .success(true)
@@ -616,8 +630,9 @@ public class BookDropService {
         }
     }
 
-    private BookdropFileResult failureResult(String fileName, String message) {
+    private BookdropFileResult failureResult(Long fileId, String fileName, String message) {
         return BookdropFileResult.builder()
+                .fileId(fileId)
                 .fileName(fileName)
                 .message(message)
                 .success(false)

@@ -29,10 +29,10 @@ public interface BookdropFileRepository extends JpaRepository<BookdropFileEntity
     @Query("DELETE FROM BookdropFileEntity f WHERE f.filePath LIKE CONCAT(:prefix, '%')")
     int deleteAllByFilePathStartingWith(@Param("prefix") String prefix);
 
-    @Query("SELECT f.id FROM BookdropFileEntity f WHERE f.id NOT IN :excludedIds")
+    @Query("SELECT f.id FROM BookdropFileEntity f WHERE f.id NOT IN :excludedIds ORDER BY f.createdAt ASC, f.id ASC")
     List<Long> findAllExcludingIdsFlat(@Param("excludedIds") List<Long> excludedIds);
 
-    @Query("SELECT f.id FROM BookdropFileEntity f")
+    @Query("SELECT f.id FROM BookdropFileEntity f ORDER BY f.createdAt ASC, f.id ASC")
     List<Long> findAllIds();
 
     @Query("SELECT f.filePath FROM BookdropFileEntity f WHERE f.filePath IN :filePaths")

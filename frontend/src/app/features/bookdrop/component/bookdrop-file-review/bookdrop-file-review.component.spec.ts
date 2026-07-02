@@ -180,34 +180,96 @@ describe('BookdropFileReviewComponent', () => {
     expect(component.canFinalize).toBe(false);
   });
 
-  it('keeps the current-page selection state in sync with select-all changes', () => {
+  it('selects only the current page when selecting all', () => {
     const component = createComponent();
     const first = makeFileUi(1);
     const second = makeFileUi(2);
+    const offPage = makeFileUi(3);
 
-    component.fileUiCache = {1: first, 2: second};
+    component.fileUiCache = {1: first, 2: second, 3: offPage};
     component.bookdropFileUis = [first, second];
 
     component.selectAll(true);
-    expect(component.selectAllAcrossPages).toBe(true);
+    expect(component.selectAllAcrossPages).toBe(false);
     expect(component.excludedFiles.size).toBe(0);
     expect(component.bookdropFileUis.map(file => file.selected)).toEqual([true, true]);
-    expect(Object.values(component.fileUiCache).map(file => file.selected)).toEqual([true, true]);
+    expect(Object.values(component.fileUiCache).map(file => file.selected)).toEqual([true, true, false]);
 
     component.toggleFileSelection(1, false);
-    expect(component.excludedFiles.has(1)).toBe(true);
+    expect(component.excludedFiles.has(1)).toBe(false);
     expect(component.fileUiCache[1].selected).toBe(false);
     expect(component.bookdropFileUis[0].selected).toBe(false);
 
     component.toggleFileSelection(1, true);
-    expect(component.excludedFiles.has(1)).toBe(false);
     expect(component.fileUiCache[1].selected).toBe(true);
 
     component.selectAll(false);
     expect(component.selectAllAcrossPages).toBe(false);
     expect(component.excludedFiles.size).toBe(0);
     expect(component.bookdropFileUis.map(file => file.selected)).toEqual([false, false]);
-    expect(Object.values(component.fileUiCache).map(file => file.selected)).toEqual([false, false]);
+    expect(Object.values(component.fileUiCache).map(file => file.selected)).toEqual([false, false, false]);
+  });
+
+  it('selects every page explicitly and reloads from page zero when page size changes', () => {
+    const component = createComponent();
+    const first = makeFileUi(1);
+    const second = makeFileUi(2);
+    const offPage = makeFileUi(3);
+
+    component.fileUiCache = {1: first, 2: second, 3: offPage};
+    component.bookdropFileUis = [first, second];
+    component.excludedFiles.add(2);
+
+    expect(component.pageSize).toBe(150);
+    expect(component.pageSizeOptions.map(option => option.value)).toEqual([50, 100, 150]);
+
+    component.selectAllPages();
+    expect(component.selectAllAcrossPages).toBe(true);
+    expect(component.excludedFiles.size).toBe(0);
+    expect(Object.values(component.fileUiCache).map(file => file.selected)).toEqual([true, true, true]);
+    expect(component.bookdropFileUis.map(file => file.selected)).toEqual([true, true]);
+
+    getPendingFiles.mockReturnValue(of({
+      content: [],
+      page: {totalElements: 0, totalPages: 0, number: 0, size: 50},
+    }));
+    component.pageSize = 50;
+    component.onPageSizeChange();
+
+    expect(component.selectAllAcrossPages).toBe(false);
+    expect(component.excludedFiles.size).toBe(0);
+    expect(getPendingFiles).toHaveBeenCalledWith(0, 50);
+  });
+
+  it('keeps failed finalize rows visible and selected without refilling the page', () => {
+    const component = createComponent();
+    const imported = makeFileUi(1, {selected: true, selectedLibraryId: '1', selectedPathId: '10'});
+    const duplicate = makeFileUi(2, {selected: true, selectedLibraryId: '1', selectedPathId: '10'});
+    const untouched = makeFileUi(3, {selected: false});
+
+    component.fileUiCache = {1: imported, 2: duplicate, 3: untouched};
+    component.bookdropFileUis = [imported, duplicate, untouched];
+    component.totalRecords = 10;
+    finalizeImport.mockReturnValue(of({
+      totalFiles: 2,
+      successfullyImported: 1,
+      failed: 1,
+      processedAt: '2026-03-26T00:00:00Z',
+      results: [
+        {fileId: 1, fileName: 'file-1.epub', success: true, message: 'Imported'},
+        {fileId: 2, fileName: 'file-2.epub', success: false, message: 'File already exists'},
+      ],
+    }));
+
+    (component as unknown as { finalizeImport: () => void }).finalizeImport();
+
+    expect(finalizeImport).toHaveBeenCalledTimes(1);
+    expect(getPendingFiles).not.toHaveBeenCalled();
+    expect(component.bookdropFileUis.map(file => file.file.id)).toEqual([2, 3]);
+    expect(component.bookdropFileUis.map(file => file.selected)).toEqual([true, false]);
+    expect(component.fileUiCache[1]).toBeUndefined();
+    expect(component.fileUiCache[2].selected).toBe(true);
+    expect(component.totalRecords).toBe(9);
   });
 
   it('warns instead of prompting when destructive actions have no selected files', () => {
