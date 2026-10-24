@@ -136,12 +136,25 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "runnerConfig": "vitest-base.config.ts"
+            "runnerConfig": "vitest-base.config.ts",
+            "isolate": true,
+            "reporters": [
+              ["default", {"summary": false}],
+              ["junit", {"outputFile": "test-results/vitest-results.xml"}]
+            ],
+            "coverageInclude": ["src/app/**/*.ts", "src/main.ts"],
+            "coverageExclude": [
+              "src/app/**/*.spec.ts",
+              "src/app/**/*.module.ts",
+              "src/**/*.d.ts"
+            ],
+            "coverageReporters": ["text", "html", "json", "json-summary", "lcov"]
           }
         },
         "lint": {
           "builder": "@angular-eslint/builder:lint",
           "options": {
+            "applySuppressions": true,
             "lintFilePatterns": [
               "src/**/*.ts",
               "src/**/*.html"

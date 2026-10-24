@@ -6,11 +6,14 @@ import {
   inject,
   input,
   model,
+  output,
   type ElementRef,
   viewChildren,
 } from '@angular/core';
 import { type FormValueControl } from '@angular/forms/signals';
+import { LucideDynamicIcon, type LucideIconData } from '@lucide/angular';
 import { cn } from '../cn';
+import { AppControlTransitionDirective } from '../control.styles';
 import { APP_FIELD } from '../field/app-field.context';
 import {
   appRadioGroupDotVariants,
@@ -24,6 +27,7 @@ import {
 export interface RadioOption<T> {
   readonly value: T;
   readonly label: string;
+  readonly icon?: LucideIconData;
   readonly description?: string;
   readonly disabled?: boolean;
 }
@@ -34,6 +38,7 @@ let nextGroupId = 0;
 @Component({
   selector: 'app-radio-group',
   standalone: true,
+  imports: [AppControlTransitionDirective, LucideDynamicIcon],
   host: { class: 'block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -46,9 +51,10 @@ let nextGroupId = 0;
       [attr.aria-describedby]="resolvedDescribedBy()"
       [attr.aria-invalid]="showInvalid() ? 'true' : null"
       [attr.aria-readonly]="readonly() ? 'true' : null"
-      [attr.aria-busy]="pending() ? 'true' : null">
+      [attr.aria-busy]="pending() ? 'true' : null"
+      (focusout)="markTouchedWhenFocusLeavesGroup($event)">
       @for (option of options(); track option.value; let i = $index) {
-        <label [class]="variant() === 'segmented' ? segmentClass(i) : optionClass()">
+        <label appControlTransition [class]="variant() === 'segmented' ? segmentClass(i) : optionClass()">
           <input
             #radio
             type="radio"
@@ -57,12 +63,14 @@ let nextGroupId = 0;
             [checked]="isSelected(option)"
             [disabled]="isUnavailable() || option.disabled === true"
             [required]="required()"
-            (change)="onSelect(option)"
-            (blur)="touched.set(true)" />
+            (change)="onSelect(option)" />
           @if (variant() === 'segmented') {
+            @if (option.icon; as optionIcon) {
+              <svg [lucideIcon]="optionIcon" [class]="segmentIconClass" aria-hidden="true"></svg>
+            }
             <span class="truncate leading-none">{{ option.label }}</span>
           } @else {
-            <span [class]="dotClass()" aria-hidden="true"></span>
+            <span appControlTransition [class]="dotClass()" aria-hidden="true"></span>
             <span [class]="textBlockClass()">
               <span class="font-medium leading-5">{{ option.label }}</span>
               @if (option.description) {
@@ -76,13 +84,15 @@ let nextGroupId = 0;
   `,
 })
 export class AppRadioGroupComponent<T> implements FormValueControl<T | null> {
+  private readonly fieldContext = inject(APP_FIELD, { optional: true });
   readonly value = model<T | null>(null);
   readonly disabled = input(false, { transform: booleanAttribute });
   readonly invalid = input(false, { transform: booleanAttribute });
   readonly pending = input(false, { transform: booleanAttribute });
   readonly required = input(false, { transform: booleanAttribute });
   readonly readonly = input(false, { transform: booleanAttribute });
-  readonly touched = model(false);
+  readonly touched = input(false, { transform: booleanAttribute });
+  readonly touch = output<void>();
   readonly name = input('');
 
   readonly options = input<readonly RadioOption<T>[]>([]);
@@ -94,8 +104,6 @@ export class AppRadioGroupComponent<T> implements FormValueControl<T | null> {
   readonly ariaDescribedBy = input('');
   readonly styleClass = input('');
   readonly compareWith = input<(optionValue: T, selectedValue: T) => boolean>(defaultCompareWith);
-
-  private readonly fieldContext = inject(APP_FIELD, { optional: true });
   private readonly autoName = `app-radio-group-${++nextGroupId}`;
   private readonly radios = viewChildren<ElementRef<HTMLInputElement>>('radio');
 
@@ -125,6 +133,7 @@ export class AppRadioGroupComponent<T> implements FormValueControl<T | null> {
       this.variant() === 'card' && 'peer-checked:text-primary-text',
     ),
   );
+  protected readonly segmentIconClass = 'size-[1em] shrink-0';
 
   protected isSelected(option: RadioOption<T>): boolean {
     const value = this.value();
@@ -145,6 +154,13 @@ export class AppRadioGroupComponent<T> implements FormValueControl<T | null> {
 
   protected onSelect(option: RadioOption<T>): void {
     this.value.set(option.value);
+  }
+
+  protected markTouchedWhenFocusLeavesGroup(event: FocusEvent): void {
+    const control = event.currentTarget;
+    const next = event.relatedTarget;
+    if (control instanceof HTMLElement && next instanceof Node && control.contains(next)) return;
+    this.touch.emit();
   }
 
   focus(options?: FocusOptions): void {

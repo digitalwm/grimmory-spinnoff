@@ -16,13 +16,13 @@ import {from, Observable, of} from 'rxjs';
 import {catchError, filter, map, switchMap, tap} from 'rxjs/operators';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 
-import {Button} from 'primeng/button';
-import {Slider, SliderChangeEvent} from 'primeng/slider';
-import {ProgressSpinner} from 'primeng/progressspinner';
-import {Tooltip} from 'primeng/tooltip';
-import {MenuItem, MessageService} from 'primeng/api';
-import {SelectButton} from 'primeng/selectbutton';
-import {Menu} from 'primeng/menu';
+import {Button} from '@openng/optimus-ui/button';
+import {Slider, SliderChangeEvent} from '@openng/optimus-ui/slider';
+import {ProgressSpinner} from '@openng/optimus-ui/progressspinner';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {MenuItem, MessageService} from '@openng/optimus-ui/api';
+import {SelectButton} from '@openng/optimus-ui/selectbutton';
+import {Menu} from '@openng/optimus-ui/menu';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 import {AudiobookService} from './audiobook.service';
@@ -53,20 +53,19 @@ import {API_CONFIG} from '../../../core/config/api-config';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AudiobookPlayerComponent implements OnInit, OnDestroy {
-  @ViewChild('audioElement') audioElement!: ElementRef<HTMLAudioElement>;
-
   private readonly destroyRef = inject(DestroyRef);
-  private audiobookService = inject(AudiobookService);
-  private bookService = inject(BookService);
-  private bookMarkService = inject(BookMarkService);
-  private authService = inject(AuthService);
-  private route = inject(ActivatedRoute);
-  private location = inject(Location);
-  private messageService = inject(MessageService);
-  private audiobookSessionService = inject(AudiobookSessionService);
-  private pageTitle = inject(PageTitleService);
+  private readonly audiobookService = inject(AudiobookService);
+  private readonly bookService = inject(BookService);
+  private readonly bookMarkService = inject(BookMarkService);
+  private readonly authService = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly location = inject(Location);
+  private readonly messageService = inject(MessageService);
+  private readonly audiobookSessionService = inject(AudiobookSessionService);
+  private readonly pageTitle = inject(PageTitleService);
   private readonly t = inject(TranslocoService);
   private readonly cdr = inject(ChangeDetectorRef);
+  @ViewChild('audioElement') audioElement!: ElementRef<HTMLAudioElement>;
 
   private loadRequestId = 0;
   isLoading = true;
@@ -571,7 +570,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
 
   seek(event: SliderChangeEvent): void {
     if (this.duration > 0 && event.value !== undefined) {
-      const seekTime = event.value as number;
+      const seekTime = event.value;
       this.isSeeking = true;
       this.currentTime = seekTime;
       this.updateCurrentChapter();
@@ -603,7 +602,7 @@ export class AudiobookPlayerComponent implements OnInit, OnDestroy {
   setVolume(event: SliderChangeEvent): void {
     const audio = this.audioElement?.nativeElement;
     if (event.value !== undefined) {
-      this.volume = event.value as number;
+      this.volume = event.value;
       this.isMuted = this.volume === 0;
       if (audio) {
         audio.volume = this.volume;

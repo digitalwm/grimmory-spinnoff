@@ -1,10 +1,10 @@
-import {ChangeDetectionStrategy, Component, computed, DestroyRef, EventEmitter, inject, Input, OnChanges, OnInit, Output, signal, SimpleChanges} from '@angular/core';
+import {ChangeDetectionStrategy, Component, computed, DestroyRef, inject, Input, OnChanges, OnInit, output, signal, SimpleChanges} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {Select} from 'primeng/select';
-import {MessageService} from 'primeng/api';
-import {Tooltip} from 'primeng/tooltip';
+import {Button} from '@openng/optimus-ui/button';
+import {Select} from '@openng/optimus-ui/select';
+import {MessageService} from '@openng/optimus-ui/api';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {
   AGE_RATING_OPTIONS,
   CONTENT_RATINGS,
@@ -32,15 +32,14 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ContentRestrictionsEditorComponent implements OnInit, OnChanges {
+  private readonly contentRestrictionService = inject(ContentRestrictionService);
+  private readonly bookService = inject(BookService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
   @Input() userId!: number;
   @Input() isEditing = false;
-  @Output() restrictionsChanged = new EventEmitter<ContentRestriction[]>();
-
-  private contentRestrictionService = inject(ContentRestrictionService);
-  private bookService = inject(BookService);
-  private messageService = inject(MessageService);
-  private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
+  readonly restrictionsChanged = output<ContentRestriction[]>();
   private readonly sortedMetadata = computed(() => {
     const md = this.bookService.uniqueMetadata();
     return {
@@ -159,9 +158,9 @@ export class ContentRestrictionsEditorComponent implements OnInit, OnChanges {
 
     const restriction: ContentRestriction = {
       userId: this.userId,
-      restrictionType: this.newRestriction.restrictionType!,
-      mode: this.newRestriction.mode!,
-      value: this.newRestriction.value!
+      restrictionType: this.newRestriction.restrictionType,
+      mode: this.newRestriction.mode,
+      value: this.newRestriction.value
     };
     const requestedUserId = this.userId;
 

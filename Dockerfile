@@ -1,22 +1,21 @@
 FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-build
 
 ENV PNPM_HOME="/pnpm"
-ENV PATH="${PNPM_HOME}:${PATH}"
+ENV PATH="${PNPM_HOME}/bin:${PATH}"
 
 WORKDIR /workspace
 
-RUN npm install -g pnpm@11.3.0
+COPY package.json ./
+RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.split('@')[1]")" && \
+    ENV="/root/.shrc" SHELL="/bin/sh" npx --yes get-pnpm "$PNPM_VERSION"
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store && \
     pnpm fetch
 
-COPY package.json ./
 COPY frontend/package.json ./frontend/
-COPY tools/release/package.json ./tools/release/
 RUN --mount=type=cache,target=/pnpm/store \
-    pnpm install --offline --frozen-lockfile
+    pnpm install --offline --frozen-lockfile --ignore-scripts
 
 COPY frontend/ ./frontend/
 RUN --mount=type=cache,target=/workspace/frontend/.angular/cache \
@@ -37,6 +36,7 @@ RUN chmod +x ./gradlew
 RUN --mount=type=cache,target=/home/gradle/.gradle \
     ./gradlew --no-daemon dependencies
 
+COPY LICENSE NOTICE /workspace/
 COPY backend/ ./
 COPY --from=frontend-build /workspace/frontend/dist/grimmory/browser /tmp/frontend-dist
 
@@ -79,8 +79,6 @@ ENV JAVA_TOOL_OPTIONS="-XX:+UseShenandoahGC \
     -XX:MaxRAMPercentage=60.0 \
     -XX:InitialRAMPercentage=8.0 \
     -XX:+ExitOnOutOfMemoryError \
-    -XX:+HeapDumpOnOutOfMemoryError \
-    -XX:HeapDumpPath=/tmp/heapdump.hprof \
     -XX:MaxMetaspaceSize=256m \
     -XX:ReservedCodeCacheSize=48m \
     -Xss512k \
@@ -123,12 +121,10 @@ LABEL org.opencontainers.image.title="Grimmory" \
 ENV APP_VERSION=${APP_VERSION} \
     APP_REVISION=${APP_REVISION}
 
-ARG BOOKLORE_PORT=6060
-ENV BOOKLORE_PORT=${BOOKLORE_PORT}
-EXPOSE ${BOOKLORE_PORT}
+EXPOSE 6060
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=5 \
-  CMD wget -q --spider http://localhost:${BOOKLORE_PORT}/api/v1/healthcheck
+  CMD wget -q --spider http://localhost:${SERVER_PORT:-${BOOKLORE_PORT:-6060}}/api/v1/healthcheck
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["java", "--enable-native-access=ALL-UNNAMED", "--enable-preview", "-jar", "/app/app.jar"]

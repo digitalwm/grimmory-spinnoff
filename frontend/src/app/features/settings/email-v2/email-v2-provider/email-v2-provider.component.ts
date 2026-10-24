@@ -1,20 +1,20 @@
 import {Component, DestroyRef, inject, OnInit, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {finalize} from 'rxjs';
-import {Button} from 'primeng/button';
-import {Checkbox} from 'primeng/checkbox';
-import {MessageService} from 'primeng/api';
-import {RadioButton} from 'primeng/radiobutton';
+import {Button} from '@openng/optimus-ui/button';
+import {Checkbox} from '@openng/optimus-ui/checkbox';
+import {MessageService} from '@openng/optimus-ui/api';
+import {RadioButton} from '@openng/optimus-ui/radiobutton';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {TableModule} from 'primeng/table';
-import {Tooltip} from 'primeng/tooltip';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
+import {TableModule} from '@openng/optimus-ui/table';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {EmailV2ProviderService} from './email-v2-provider.service';
 import {EmailProvider} from '../email-provider.model';
 import {UserService} from '../../user-management/user.service';
 import {DialogLauncherService} from '../../../../shared/services/dialog-launcher.service';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
-import {ProgressSpinner} from 'primeng/progressspinner';
+import {ProgressSpinner} from '@openng/optimus-ui/progressspinner';
 
 @Component({
   selector: 'app-email-v2-provider',
@@ -34,16 +34,16 @@ import {ProgressSpinner} from 'primeng/progressspinner';
   styleUrl: './email-v2-provider.component.scss'
 })
 export class EmailV2ProviderComponent implements OnInit {
+  private readonly dialogLauncherService = inject(DialogLauncherService);
+  private readonly emailProvidersService = inject(EmailV2ProviderService);
+  private readonly messageService = inject(MessageService);
+  private readonly userService = inject(UserService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
   emailProviders: EmailProvider[] = [];
   editingProviderIds: number[] = [];
   ref: DynamicDialogRef | undefined | null;
-  private dialogLauncherService = inject(DialogLauncherService);
-  private emailProvidersService = inject(EmailV2ProviderService);
-  private messageService = inject(MessageService);
-  private userService = inject(UserService);
-  private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
-  loading = signal(false);
+  readonly loading = signal(false);
   private loadingRequestSeq = 0;
   private activeLoadingRequestSeq: number | null = null;
   defaultProviderId: unknown;

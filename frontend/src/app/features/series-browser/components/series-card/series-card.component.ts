@@ -1,13 +1,12 @@
-import {ChangeDetectionStrategy, Component, EventEmitter, inject, Input, Output} from '@angular/core';
-import {NgClass} from '@angular/common';
-import {ProgressBar} from 'primeng/progressbar';
-import {Button} from 'primeng/button';
-import {Tooltip} from 'primeng/tooltip';
+import {ChangeDetectionStrategy, Component, inject, Input, output} from '@angular/core';
+import {ProgressBar} from '@openng/optimus-ui/progressbar';
+import {Button} from '@openng/optimus-ui/button';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {TranslocoPipe} from '@jsverse/transloco';
 import {SeriesSummary} from '../../model/series.model';
 import {BookService} from '../../../book/service/book.service';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
-import {CoverPlaceholderComponent} from '../../../../shared/components/cover-generator/cover-generator.component';
+import {CoverComponent} from '../../../../shared/components/cover/cover.component';
 
 @Component({
   selector: 'app-series-card',
@@ -15,15 +14,14 @@ import {CoverPlaceholderComponent} from '../../../../shared/components/cover-gen
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './series-card.component.html',
   styleUrls: ['./series-card.component.scss'],
-  imports: [NgClass, ProgressBar, Button, Tooltip, TranslocoPipe, CoverPlaceholderComponent]
+  imports: [ProgressBar, Button, Tooltip, TranslocoPipe, CoverComponent]
 })
 export class SeriesCardComponent {
+  protected urlHelper = inject(UrlHelperService);
+  private readonly bookService = inject(BookService);
 
   @Input({required: true}) series!: SeriesSummary;
-  @Output() cardClick = new EventEmitter<SeriesSummary>();
-
-  protected urlHelper = inject(UrlHelperService);
-  private bookService = inject(BookService);
+  readonly cardClick = output<SeriesSummary>();
 
   get progressPercent(): number {
     return Math.round(this.series.progress * 100);

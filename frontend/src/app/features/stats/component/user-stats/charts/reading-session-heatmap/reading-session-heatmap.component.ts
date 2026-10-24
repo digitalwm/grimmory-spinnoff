@@ -1,6 +1,6 @@
 import {Component, inject, Input, OnDestroy, OnInit} from '@angular/core';
 import {BaseChartDirective} from 'ng2-charts';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {Chart, ChartConfiguration, ChartData, registerables} from 'chart.js';
 import {MatrixController, MatrixElement} from 'chartjs-chart-matrix';
 import {BehaviorSubject, EMPTY, Observable, Subject} from 'rxjs';
@@ -39,6 +39,8 @@ type SessionHeatmapChartData = ChartData<'matrix', MatrixDataPoint[], string>;
   styleUrls: ['./reading-session-heatmap.component.scss']
 })
 export class ReadingSessionHeatmapComponent implements OnInit, OnDestroy {
+  private readonly userStatsService = inject(UserStatsService);
+  private readonly translocoService = inject(TranslocoService);
   @Input() initialYear: number = new Date().getFullYear();
 
   public currentYear: number = new Date().getFullYear();
@@ -52,9 +54,6 @@ export class ReadingSessionHeatmapComponent implements OnInit, OnDestroy {
   public consistencyPercent = 0;
   public milestones: Milestone[] = [];
   public hasStreakData = false;
-
-  private readonly userStatsService = inject(UserStatsService);
-  private readonly translocoService = inject(TranslocoService);
   private readonly destroy$ = new Subject<void>();
   private readonly chartDataSubject: BehaviorSubject<SessionHeatmapChartData>;
   private maxSessionCount = 1;
@@ -87,6 +86,7 @@ export class ReadingSessionHeatmapComponent implements OnInit, OnDestroy {
               const point = context[0].raw as MatrixDataPoint;
               const date = new Date(point.date);
               return date.toLocaleDateString('en-US', {
+                timeZone: 'UTC',
                 weekday: 'short',
                 year: 'numeric',
                 month: 'short',
@@ -100,8 +100,7 @@ export class ReadingSessionHeatmapComponent implements OnInit, OnDestroy {
                 : this.translocoService.translate('statsUser.sessionHeatmap.readingSessions_plural', {count: point.v});
             }
           }
-        },
-        datalabels: {display: false}
+        }
       },
       scales: {
         x: {

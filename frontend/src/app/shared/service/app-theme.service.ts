@@ -1,7 +1,7 @@
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
-import { computed, inject, Injectable, PLATFORM_ID, signal } from '@angular/core';
+import { computed, inject, Service, PLATFORM_ID, signal } from '@angular/core';
 import { FaviconService } from '../layout/theme/favicon-service';
-import {applyPrimeTheme, primeThemeTokenPalettes} from '../layout/theme/theme-palette-extend';
+import {applyOptimusTheme, optimusThemeTokenPalettes} from '../layout/theme/theme-palette-extend';
 import {
   APP_THEME_OPTIONS,
   AppearancePreference,
@@ -29,10 +29,11 @@ interface LoadedAppState {
   shouldPersist: boolean;
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class AppThemeService {
+  document = inject(DOCUMENT);
+  platformId = inject(PLATFORM_ID);
+  faviconService = inject(FaviconService);
   private readonly STORAGE_KEY = 'appConfigState';
   readonly themes = APP_THEME_OPTIONS;
   private readonly appStateSignal = signal<AppState>(this.withDefaults({}));
@@ -44,9 +45,6 @@ export class AppThemeService {
   readonly themeSyncEnabled = computed(() => this.appStateSignal().themeSyncEnabled !== false);
   readonly oledDarkMode = computed(() => this.appStateSignal().oledDarkMode);
   readonly effectiveAppearance = this.effectiveAppearanceSignal.asReadonly();
-  document = inject(DOCUMENT);
-  platformId = inject(PLATFORM_ID);
-  faviconService = inject(FaviconService);
 
   constructor() {
     const initialState = this.loadAppState();
@@ -211,7 +209,7 @@ export class AppThemeService {
       return;
     }
 
-    applyPrimeTheme(primeThemeTokenPalettes());
+    applyOptimusTheme(optimusThemeTokenPalettes());
     this.updateFavicon();
   }
 
@@ -267,8 +265,8 @@ export class AppThemeService {
   private updateFavicon(): void {
     const styles = getComputedStyle(this.document.documentElement);
     this.faviconService.updateFavicon(
-      styles.getPropertyValue('--color-primary-300').trim(),
-      styles.getPropertyValue('--color-primary-500').trim(),
+      styles.getPropertyValue('--color-logo-start').trim(),
+      styles.getPropertyValue('--color-logo-end').trim(),
     );
   }
 }

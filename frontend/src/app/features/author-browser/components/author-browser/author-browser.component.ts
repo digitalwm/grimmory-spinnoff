@@ -1,15 +1,15 @@
 import {Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, OnInit, signal, viewChild} from '@angular/core';
 import {FormsModule} from '@angular/forms';
-import {ProgressSpinner} from 'primeng/progressspinner';
-import {InputText} from 'primeng/inputtext';
-import {Select} from 'primeng/select';
-import {Popover} from 'primeng/popover';
-import {Button} from 'primeng/button';
-import {Divider} from 'primeng/divider';
-import {Tooltip} from 'primeng/tooltip';
+import {ProgressSpinner} from '@openng/optimus-ui/progressspinner';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Select} from '@openng/optimus-ui/select';
+import {Popover} from '@openng/optimus-ui/popover';
+import {Button} from '@openng/optimus-ui/button';
+import {Divider} from '@openng/optimus-ui/divider';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 import {RouteScrollPositionService} from '../../../../shared/service/route-scroll-position.service';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {AuthorService} from '../../service/author.service';
 import {AuthorSummary, EnrichedAuthor, AuthorFilters, DEFAULT_AUTHOR_FILTERS} from '../../model/author.model';
 import {AuthorCardComponent} from '../author-card/author-card.component';
@@ -84,17 +84,17 @@ export class AuthorBrowserComponent implements OnInit {
   private static readonly MIN_SCALE = 0.7;
   private static readonly MAX_SCALE = 1.3;
 
-  private authorService = inject(AuthorService);
-  private bookService = inject(BookService);
-  private messageService = inject(MessageService);
-  private pageTitle = inject(PageTitleService);
-  private scrollService = inject(RouteScrollPositionService);
-  private t = inject(TranslocoService);
-  private router = inject(Router);
-  private activatedRoute = inject(ActivatedRoute);
-  private destroyRef = inject(DestroyRef);
-  private localStorageService = inject(LocalStorageService);
-  private layoutService = inject(LayoutService);
+  private readonly authorService = inject(AuthorService);
+  private readonly bookService = inject(BookService);
+  private readonly messageService = inject(MessageService);
+  private readonly pageTitle = inject(PageTitleService);
+  private readonly scrollService = inject(RouteScrollPositionService);
+  private readonly t = inject(TranslocoService);
+  private readonly router = inject(Router);
+  private readonly activatedRoute = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly localStorageService = inject(LocalStorageService);
+  private readonly layoutService = inject(LayoutService);
   protected userService = inject(UserService);
   protected selectionService = inject(AuthorSelectionService);
 
@@ -123,17 +123,17 @@ export class AuthorBrowserComponent implements OnInit {
 
   readonly screenWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1024);
   thumbnailCacheBusters = new Map<number, number>();
-  private selectedAuthors = this.selectionService.selectedAuthors;
-  private allAuthorsState = signal<AuthorSummary[] | null>(null);
+  private readonly selectedAuthors = this.selectionService.selectedAuthors;
+  private readonly allAuthorsState = signal<AuthorSummary[] | null>(null);
 
-  loading = computed(() => this.allAuthorsState() === null || this.bookService.isBooksLoading());
+  readonly loading = computed(() => this.allAuthorsState() === null || this.bookService.isBooksLoading());
   protected currentUser = this.userService.currentUser;
-  selectedCount = computed(() => this.selectedAuthors().size);
-  searchTerm = signal('');
-  sortBy = signal('name');
-  sortDirection = signal<SortDirection>('asc');
-  filters = signal<AuthorFilters>({...DEFAULT_AUTHOR_FILTERS});
-  private enrichedAuthors = computed(() => {
+  readonly selectedCount = computed(() => this.selectedAuthors().size);
+  readonly searchTerm = signal('');
+  readonly sortBy = signal('name');
+  readonly sortDirection = signal<SortDirection>('asc');
+  readonly filters = signal<AuthorFilters>({...DEFAULT_AUTHOR_FILTERS});
+  private readonly enrichedAuthors = computed(() => {
     const authors = this.allAuthorsState();
     if (!authors) {
       return [];
@@ -141,7 +141,7 @@ export class AuthorBrowserComponent implements OnInit {
 
     return this.enrichAuthors(authors, this.bookService.books());
   });
-  libraryOptions = computed<FilterOption[]>(() => {
+  readonly libraryOptions = computed<FilterOption[]>(() => {
     const allLabel = this.t.translate('authorBrowser.filters.all');
     const librarySet = new Set<string>();
 
@@ -156,7 +156,7 @@ export class AuthorBrowserComponent implements OnInit {
       ...[...librarySet].sort().map(library => ({label: library, value: library}))
     ];
   });
-  genreOptions = computed<FilterOption[]>(() => {
+  readonly genreOptions = computed<FilterOption[]>(() => {
     const allLabel = this.t.translate('authorBrowser.filters.all');
     const genreSet = new Set<string>();
 
@@ -171,7 +171,7 @@ export class AuthorBrowserComponent implements OnInit {
       ...[...genreSet].sort().map(category => ({label: category, value: category}))
     ];
   });
-  activeFilterCount = computed(() => {
+  readonly activeFilterCount = computed(() => {
     const filters = this.filters();
     let count = 0;
     if (filters.matchStatus !== 'all') count++;
@@ -182,7 +182,7 @@ export class AuthorBrowserComponent implements OnInit {
     if (filters.genre !== 'all') count++;
     return count;
   });
-  filteredAuthors = computed<EnrichedAuthor[]>(() => {
+  readonly filteredAuthors = computed<EnrichedAuthor[]>(() => {
     let result = this.enrichedAuthors();
     const search = this.searchTerm().trim().toLowerCase();
 
@@ -443,7 +443,7 @@ export class AuthorBrowserComponent implements OnInit {
     }
 
     return authors.map(author => {
-      const authorBooks = booksByAuthor.get(author.name.toLowerCase()) || [];
+      const authorBooks = booksByAuthor.get(author.name.toLowerCase()) ?? [];
 
       const libraryIds = new Set<number>();
       const libraryNameSet = new Set<string>();

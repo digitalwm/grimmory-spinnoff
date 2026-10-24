@@ -1,6 +1,6 @@
 import {Component, computed, inject} from '@angular/core';
 import {BaseChartDirective} from 'ng2-charts';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {ChartConfiguration, ChartData} from 'chart.js';
 import {BookService} from '../../../../../book/service/book.service';
 import {Book} from '../../../../../book/model/book.model';
@@ -104,7 +104,7 @@ export class ReadingProgressChartComponent {
           title: (context) => context[0].label,
           label: (context) => {
             const value = context.parsed;
-            const total = (context.dataset.data as number[]).reduce((a, b) => a + b, 0);
+            const total = (context.dataset.data).reduce((a, b) => a + b, 0);
             const percentage = ((value / total) * 100).toFixed(1);
             const label = context.label;
             const rangeInfo = PROGRESS_RANGES.find(r => r.range === label);
@@ -118,8 +118,7 @@ export class ReadingProgressChartComponent {
             return this.t.translate('statsUser.readingProgress.tooltipLabel', {value, plural, description, percentage});
           }
         }
-      },
-      datalabels: {display: false}
+      }
     },
     interaction: {
       intersect: false,

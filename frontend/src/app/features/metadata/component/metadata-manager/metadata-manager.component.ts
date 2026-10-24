@@ -1,19 +1,19 @@
 import {Component, effect, inject, OnDestroy, OnInit, signal} from '@angular/core';
-import {Tab, TabList, TabPanel, TabPanels, Tabs} from 'primeng/tabs';
-import {TableModule} from 'primeng/table';
-import {Button} from 'primeng/button';
-import {Checkbox} from 'primeng/checkbox';
-import {InputText} from 'primeng/inputtext';
-import {Dialog} from 'primeng/dialog';
-import {ConfirmationService, MessageService} from 'primeng/api';
+import {Tab, TabList, TabPanel, TabPanels, Tabs} from '@openng/optimus-ui/tabs';
+import {TableModule} from '@openng/optimus-ui/table';
+import {Button} from '@openng/optimus-ui/button';
+import {Checkbox} from '@openng/optimus-ui/checkbox';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Dialog} from '@openng/optimus-ui/dialog';
+import {ConfirmationService, MessageService} from '@openng/optimus-ui/api';
 import {PageTitleService} from "../../../../shared/service/page-title.service";
 import {BookService} from '../../../book/service/book.service';
 import {BookMetadataManageService} from '../../../book/service/book-metadata-manage.service';
 import {Book} from '../../../book/model/book.model';
 import {FormsModule} from '@angular/forms';
-import {Tooltip} from 'primeng/tooltip';
-import {IconField} from 'primeng/iconfield';
-import {InputIcon} from 'primeng/inputicon';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {IconField} from '@openng/optimus-ui/iconfield';
+import {InputIcon} from '@openng/optimus-ui/inputicon';
 import {ActivatedRoute, Router} from '@angular/router';
 import {Subscription} from 'rxjs';
 import {ExternalDocLinkComponent} from '../../../../shared/components/external-doc-link/external-doc-link.component';
@@ -64,12 +64,12 @@ interface TabConfig {
   styleUrls: ['./metadata-manager.component.scss']
 })
 export class MetadataManagerComponent implements OnInit, OnDestroy {
-  private bookService = inject(BookService);
-  private bookMetadataManageService = inject(BookMetadataManageService);
-  private messageService = inject(MessageService);
-  private router = inject(Router);
-  private route = inject(ActivatedRoute);
-  private pageTitle = inject(PageTitleService);
+  private readonly bookService = inject(BookService);
+  private readonly bookMetadataManageService = inject(BookMetadataManageService);
+  private readonly messageService = inject(MessageService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly pageTitle = inject(PageTitleService);
   private readonly t = inject(TranslocoService);
 
   private routeSub!: Subscription;
@@ -100,9 +100,9 @@ export class MetadataManagerComponent implements OnInit, OnDestroy {
   selectAllPublishers = false;
   selectAllLanguages = false;
 
-  loading = signal(false);
-  mergingInProgress = signal(false);
-  deletingInProgress = signal(false);
+  readonly loading = signal(false);
+  readonly mergingInProgress = signal(false);
+  readonly deletingInProgress = signal(false);
   showMergeDialog = false;
   showRenameDialog = false;
   showDeleteDialog = false;
@@ -112,7 +112,7 @@ export class MetadataManagerComponent implements OnInit, OnDestroy {
   currentRenameItem: MetadataItem | null = null;
   currentDeleteItem: MetadataItem | null = null;
 
-  private validTabs: MetadataType[] = ['authors', 'categories', 'moods', 'tags', 'series', 'publishers', 'languages'];
+  private readonly validTabs: MetadataType[] = ['authors', 'categories', 'moods', 'tags', 'series', 'publishers', 'languages'];
   private _activeTab: MetadataType = 'authors';
 
   get activeTab(): MetadataType {
@@ -497,7 +497,7 @@ export class MetadataManagerComponent implements OnInit, OnDestroy {
   }
 
   toggleAll(type: MetadataType, checked: boolean, filteredItems?: MetadataItem[]) {
-    const itemsToToggle = filteredItems || this[type];
+    const itemsToToggle = filteredItems ?? this[type];
     itemsToToggle.forEach(item => item.selected = checked);
     this.updateSelectAllState(type);
   }
@@ -580,7 +580,7 @@ export class MetadataManagerComponent implements OnInit, OnDestroy {
   onMetadataClick(type: MetadataType, value: string): void {
     const filterKeyMap: Record<MetadataType, string> = {
       authors: 'author',
-      categories: 'category',
+      categories: 'genre',
       moods: 'mood',
       tags: 'tag',
       series: 'series',
@@ -594,11 +594,7 @@ export class MetadataManagerComponent implements OnInit, OnDestroy {
   navigateToFilteredBooks(filterKey: string, filterValue: string): void {
     this.router.navigate(['/all-books'], {
       queryParams: {
-        view: 'grid',
-        sort: 'title',
-        direction: 'asc',
-        sidebar: true,
-        filter: `${filterKey}:${encodeURIComponent(filterValue)}`
+        facet: `${filterKey}:${filterValue}`,
       }
     });
   }

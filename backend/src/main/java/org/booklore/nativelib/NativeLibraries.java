@@ -7,7 +7,6 @@ import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import com.github.gotson.nightcompress.Archive;
 import org.grimmory.pdfium4j.PdfiumLibrary;
 
 /**
@@ -20,9 +19,7 @@ import org.grimmory.pdfium4j.PdfiumLibrary;
 public final class NativeLibraries {
 
     public enum Library {
-        PDFIUM,
-        LIBARCHIVE,
-        EPUB4J_NATIVE
+        PDFIUM
     }
 
     private static final Map<Library, Probe> PROBES;
@@ -36,23 +33,6 @@ public final class NativeLibraries {
                 return clean;
             }
             PdfiumLibrary.initialize();
-            return true;
-        }));
-
-        probes.put(Library.LIBARCHIVE, new Probe("libarchive", Archive::isAvailable));
-
-        probes.put(Library.EPUB4J_NATIVE, new Probe("epub4j-native", () -> {
-            Boolean clean = tryInvokeStaticBoolean(
-                    "org.grimmory.epub4j.native_parsing.EpubNativeLibrary"
-            );
-            if (clean != null) {
-                return clean;
-            }
-            Class.forName(
-                    "org.grimmory.epub4j.native_parsing.PanamaConstants",
-                    true,
-                    NativeLibraries.class.getClassLoader()
-            );
             return true;
         }));
 
@@ -138,14 +118,6 @@ public final class NativeLibraries {
 
     public boolean isPdfiumAvailable() {
         return isAvailable(Library.PDFIUM);
-    }
-
-    public boolean isLibArchiveAvailable() {
-        return isAvailable(Library.LIBARCHIVE);
-    }
-
-    public boolean isEpubNativeAvailable() {
-        return isAvailable(Library.EPUB4J_NATIVE);
     }
 
     private record Probe(String name, CheckedBooleanSupplier fn) {}

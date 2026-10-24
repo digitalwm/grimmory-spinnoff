@@ -1,11 +1,11 @@
 import {Component, DestroyRef, computed, effect, inject, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
-import {InputText} from 'primeng/inputtext';
-import {ToggleSwitch} from 'primeng/toggleswitch';
-import {Button} from 'primeng/button';
-import {Toast} from 'primeng/toast';
-import {MessageService} from 'primeng/api';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {ToggleSwitch} from '@openng/optimus-ui/toggleswitch';
+import {Button} from '@openng/optimus-ui/button';
+import {Toast} from '@openng/optimus-ui/toast';
+import {MessageService} from '@openng/optimus-ui/api';
 import {ExternalDocLinkComponent} from '../../../../../shared/components/external-doc-link/external-doc-link.component';
 import {UserService} from '../../../user-management/user.service';
 import {HardcoverSyncSettingsService} from './hardcover-sync-settings.service';
@@ -38,9 +38,9 @@ export class HardcoverSettingsComponent {
     const user = this.userService.currentUser();
     return !!(user?.permissions.canSyncKoReader || user?.permissions.canSyncKobo || user?.permissions.admin);
   });
-  hardcoverSyncEnabled = signal(false);
-  hardcoverApiKey = signal('');
-  showHardcoverApiKey = signal(false);
+  readonly hardcoverSyncEnabled = signal(false);
+  readonly hardcoverApiKey = signal('');
+  readonly showHardcoverApiKey = signal(false);
   private prevHasPermission = false;
   private savedHardcoverSyncEnabled = false;
   private savedHardcoverApiKey = '';
@@ -134,7 +134,7 @@ export class HardcoverSettingsComponent {
         summary: this.t.translate('settingsDevice.copied'),
         detail: this.t.translate('settingsDevice.copiedDetail', {label})
       });
-    }).catch(err => {
+    }).catch((err: unknown) => {
       console.error('Copy failed', err);
       this.messageService.add({
         severity: 'error',

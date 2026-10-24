@@ -1,20 +1,20 @@
 import {Component, DestroyRef, inject, OnInit, signal, WritableSignal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
-import {TableModule} from 'primeng/table';
+import {Button} from '@openng/optimus-ui/button';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {TableModule} from '@openng/optimus-ui/table';
 import {LowerCasePipe, TitleCasePipe} from '@angular/common';
 import {User, UserService, UserUpdateRequest} from './user.service';
-import {MessageService} from 'primeng/api';
-import {Checkbox} from 'primeng/checkbox';
-import {MultiSelect} from 'primeng/multiselect';
+import {MessageService} from '@openng/optimus-ui/api';
+import {Checkbox} from '@openng/optimus-ui/checkbox';
+import {MultiSelect} from '@openng/optimus-ui/multiselect';
 import {Library} from '../../book/model/library.model';
 import {LibraryService} from '../../book/service/library.service';
-import {Dialog} from 'primeng/dialog';
-import {Password} from 'primeng/password';
-import {InputText} from 'primeng/inputtext';
-import {Tooltip} from 'primeng/tooltip';
+import {Dialog} from '@openng/optimus-ui/dialog';
+import {Password} from '@openng/optimus-ui/password';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {DialogLauncherService} from '../../../shared/services/dialog-launcher.service';
 import {ContentRestrictionsEditorComponent} from './content-restrictions-editor/content-restrictions-editor.component';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
@@ -47,16 +47,16 @@ export interface UserWithEditing extends User {
   styleUrls: ['./user-management.component.scss'],
 })
 export class UserManagementComponent implements OnInit {
+  private readonly dialogLauncherService = inject(DialogLauncherService);
+  private readonly userService = inject(UserService);
+  private readonly libraryService = inject(LibraryService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
   ref: DynamicDialogRef | undefined | null;
-  private dialogLauncherService = inject(DialogLauncherService);
-  private userService = inject(UserService);
-  private libraryService = inject(LibraryService);
-  private messageService = inject(MessageService);
-  private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
   get allLibraries() { return this.libraryService.libraries(); }
 
-  users: WritableSignal<UserWithEditing[]> = signal([]);
+  readonly users: WritableSignal<UserWithEditing[]> = signal([]);
   currentUser: User | null = null;
   editingLibraryIds: number[] = [];
   expandedRows: Record<string, boolean> = {};
@@ -85,7 +85,7 @@ export class UserManagementComponent implements OnInit {
         this.users.set(data.map((user: UserWithEditing) => ({
           ...user,
           isEditing: false,
-          selectedLibraryIds: user.assignedLibraries?.map((lib) => lib.id!).filter(id => id !== undefined) as number[] || [],
+          selectedLibraryIds: user.assignedLibraries?.map((lib) => lib.id!).filter(id => id !== undefined) || [],
           libraryNames:
             user.assignedLibraries?.map((lib) => lib.name).join(', ') || '',
         })));
@@ -112,7 +112,7 @@ export class UserManagementComponent implements OnInit {
   toggleEdit(user: UserWithEditing) {
     user.isEditing = !user.isEditing;
     if (user.isEditing) {
-      this.editingLibraryIds = [...(user.selectedLibraryIds || [])];
+      this.editingLibraryIds = [...(user.selectedLibraryIds ?? [])];
     } else {
       user.libraryNames =
         user.assignedLibraries

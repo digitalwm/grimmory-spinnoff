@@ -1,9 +1,9 @@
 import {ChangeDetectionStrategy, Component, DestroyRef, inject, OnInit, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, Router} from '@angular/router';
-import {TableLazyLoadEvent, TableModule} from 'primeng/table';
-import {Select} from 'primeng/select';
-import {DatePicker} from 'primeng/datepicker';
+import {TableLazyLoadEvent, TableModule} from '@openng/optimus-ui/table';
+import {Select} from '@openng/optimus-ui/select';
+import {DatePicker} from '@openng/optimus-ui/datepicker';
 import {FormsModule} from '@angular/forms';
 import {TranslocoDirective} from '@jsverse/transloco';
 import {Subscription, interval} from 'rxjs';
@@ -53,10 +53,10 @@ export class AuditLogsComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
-  logs = signal<AuditLog[]>([]);
-  totalRecords = signal(0);
+  readonly logs = signal<AuditLog[]>([]);
+  readonly totalRecords = signal(0);
   rows = 25;
-  loading = signal(false);
+  readonly loading = signal(false);
   selectedAction: string | null = null;
   selectedUsername: string | null = null;
   dateRange: Date[] | null = null;
@@ -64,7 +64,7 @@ export class AuditLogsComponent implements OnInit {
   autoRefresh = false;
   private autoRefreshSub?: Subscription;
 
-  usernameOptions = signal<UsernameOption[]>([{label: 'All Users', value: ''}]);
+  readonly usernameOptions = signal<UsernameOption[]>([{label: 'All Users', value: ''}]);
 
   actionOptions: ActionOption[] = [
     {label: 'All Actions', value: ''},

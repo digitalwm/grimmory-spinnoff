@@ -7,23 +7,26 @@ import {
   inject,
   input,
   model,
+  output,
   type ElementRef,
   viewChild,
 } from '@angular/core';
 import { type FormValueControl } from '@angular/forms/signals';
 import { LucideLoaderCircle } from '@lucide/angular';
 import { cn } from '../cn';
+import { AppControlTransitionDirective } from '../control.styles';
 import { APP_FIELD } from '../field/app-field.context';
 import { appTextareaVariants } from './app-textarea.variants';
 
 @Component({
   selector: 'app-textarea',
   standalone: true,
-  imports: [LucideLoaderCircle],
+  imports: [AppControlTransitionDirective, LucideLoaderCircle],
   host: { class: 'relative block w-full' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <textarea
+      appControlTransition
       #textarea
       [class]="textareaClass()"
       [attr.id]="resolvedInputId()"
@@ -37,13 +40,13 @@ import { appTextareaVariants } from './app-textarea.variants';
       [attr.minlength]="minLength()"
       [attr.rows]="rows()"
       [style.height]="initialHeight()"
-      [style.min-height]="minHeight()"
+      [style.--app-textarea-min]="minHeight()"
       [value]="value()"
       [disabled]="disabled()"
       [readonly]="readonly()"
       [required]="required()"
       (input)="onInput(textarea)"
-      (blur)="touched.set(true)"></textarea>
+      (blur)="touch.emit()"></textarea>
     @if (pending()) {
       <span class="pointer-events-none absolute right-3 top-2.5 inline-flex text-text-muted">
         <svg lucideLoaderCircle class="size-4 animate-spin" aria-hidden="true"></svg>
@@ -52,12 +55,14 @@ import { appTextareaVariants } from './app-textarea.variants';
   `,
 })
 export class AppTextareaComponent implements FormValueControl<string> {
+  private readonly fieldContext = inject(APP_FIELD, { optional: true });
   readonly value = model('');
   readonly disabled = input(false, { transform: booleanAttribute });
   readonly required = input(false, { transform: booleanAttribute });
   readonly invalid = input(false, { transform: booleanAttribute });
   readonly pending = input(false, { transform: booleanAttribute });
-  readonly touched = model(false);
+  readonly touched = input(false, { transform: booleanAttribute });
+  readonly touch = output<void>();
   readonly name = input('');
 
   readonly inputId = input('');
@@ -70,8 +75,6 @@ export class AppTextareaComponent implements FormValueControl<string> {
   readonly maxLength = input<number | undefined>(undefined);
   readonly minLength = input<number | undefined>(undefined);
   readonly autoResize = input(false, { transform: booleanAttribute });
-
-  private readonly fieldContext = inject(APP_FIELD, { optional: true });
   protected readonly resolvedInputId = computed(() => this.inputId() || this.fieldContext?.controlId() || null);
   protected readonly resolvedDescribedBy = computed(
     () => this.ariaDescribedBy() || this.fieldContext?.describedById() || null,

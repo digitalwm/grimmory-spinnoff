@@ -1,14 +1,21 @@
-import {computed, Injectable, signal} from '@angular/core';
+import {computed, inject, Service, signal} from '@angular/core';
+import {Router} from '@angular/router';
+
+import {UserService} from '../../settings/user-management/user.service';
+import {type BookFileResponse, type BookFileType, type BookSummary} from '../data/book-response.models';
+import {BookDialogHelperService} from './book-dialog-helper.service';
 
 export interface BookNavigationState {
   bookIds: number[];
   currentIndex: number;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+@Service()
 export class BookNavigationService {
+  private readonly router = inject(Router);
+  private readonly userService = inject(UserService);
+  private readonly dialogHelper = inject(BookDialogHelperService);
+
   private readonly _navigationState = signal<BookNavigationState | null>(null);
   readonly navigationState = this._navigationState.asReadonly();
 
@@ -53,6 +60,34 @@ export class BookNavigationService {
     this._availableBookIds.set(bookIds);
   }
 
+  readBook(book: BookSummary, file: BookFileResponse | undefined = book.primaryFile): void {
+    const baseUrl = this.readerRoute(file?.bookType);
+    if (!baseUrl) {
+      return;
+    }
+
+    const path = [`/${baseUrl}/book/${book.id}`];
+    if (file?.bookType !== book.primaryFile?.bookType) {
+      void this.router.navigate(path, {queryParams: {bookType: file?.bookType}});
+      return;
+    }
+
+    void this.router.navigate(path);
+  }
+
+  openBook(bookId: number, contextIds: number[]): void {
+    if (contextIds.length > 0) {
+      this.setNavigationContext(contextIds, bookId);
+    }
+
+    const mode = this.userService.currentUser()?.userSettings.metadataCenterViewMode ?? 'route';
+    if (mode === 'route') {
+      void this.router.navigate(['/book', bookId]);
+      return;
+    }
+    void this.dialogHelper.openBookDetailsDialog(bookId);
+  }
+
   setNavigationContext(bookIds: number[], currentBookId: number): void {
     const currentIndex = bookIds.indexOf(currentBookId);
     if (currentIndex !== -1) {
@@ -72,6 +107,24 @@ export class BookNavigationService {
           currentIndex: newIndex
         });
       }
+    }
+  }
+
+  private readerRoute(bookType: BookFileType | undefined): string | null {
+    switch (bookType) {
+      case 'PDF':
+        return 'pdf-reader';
+      case 'EPUB':
+      case 'FB2':
+      case 'MOBI':
+      case 'AZW3':
+        return 'ebook-reader';
+      case 'CBX':
+        return 'cbx-reader';
+      case 'AUDIOBOOK':
+        return 'audiobook-player';
+      default:
+        return null;
     }
   }
 }

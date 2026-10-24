@@ -1,13 +1,13 @@
 import {Component, inject, OnInit} from '@angular/core';
 import {FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {InputText} from 'primeng/inputtext';
-import {ProgressSpinner} from 'primeng/progressspinner';
-import {Image} from 'primeng/image';
-import {Tooltip} from 'primeng/tooltip';
-import {DynamicDialogConfig, DynamicDialogRef} from 'primeng/dynamicdialog';
+import {Button} from '@openng/optimus-ui/button';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {ProgressSpinner} from '@openng/optimus-ui/progressspinner';
+import {Image} from '@openng/optimus-ui/image';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {DynamicDialogConfig, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {finalize} from 'rxjs/operators';
 import {AuthorService} from '../../service/author.service';
 import {AuthorPhotoResult} from '../../model/author.model';
@@ -27,17 +27,16 @@ import {AuthorPhotoResult} from '../../model/author.model';
   ]
 })
 export class AuthorPhotoSearchComponent implements OnInit {
+  private readonly fb = inject(FormBuilder);
+  private readonly authorService = inject(AuthorService);
+  private readonly dynamicDialogConfig = inject(DynamicDialogConfig);
+  protected dynamicDialogRef = inject(DynamicDialogRef);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
   searchForm: FormGroup;
   photos: AuthorPhotoResult[] = [];
   searching = false;
   hasSearched = false;
-
-  private fb = inject(FormBuilder);
-  private authorService = inject(AuthorService);
-  private dynamicDialogConfig = inject(DynamicDialogConfig);
-  protected dynamicDialogRef = inject(DynamicDialogRef);
-  private messageService = inject(MessageService);
-  private t = inject(TranslocoService);
 
   private authorId!: number;
 

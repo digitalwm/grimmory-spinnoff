@@ -1,7 +1,7 @@
 import {inject, Injectable} from '@angular/core';
 import {Observable, of} from 'rxjs';
 import {catchError, map, tap} from 'rxjs/operators';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {TranslocoService} from '@jsverse/transloco';
 import {
   Annotation,
@@ -13,10 +13,10 @@ import {Annotation as ViewAnnotation, ReaderAnnotationService} from './annotatio
 
 @Injectable()
 export class ReaderAnnotationHttpService {
-  private annotationService = inject(AnnotationService);
-  private messageService = inject(MessageService);
+  private readonly annotationService = inject(AnnotationService);
+  private readonly messageService = inject(MessageService);
   private readonly t = inject(TranslocoService);
-  private readerAnnotationService = inject(ReaderAnnotationService);
+  private readonly readerAnnotationService = inject(ReaderAnnotationService);
 
   private currentChapterTitle: string | null = null;
 

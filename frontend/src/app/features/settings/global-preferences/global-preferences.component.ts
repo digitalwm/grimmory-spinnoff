@@ -1,16 +1,16 @@
 import {Component, DestroyRef, effect, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
-import {MenuItem, MessageService} from 'primeng/api';
-import {Button} from 'primeng/button';
-import {SplitButton} from 'primeng/splitbutton';
-import {ToggleSwitch} from 'primeng/toggleswitch';
+import {MenuItem, MessageService} from '@openng/optimus-ui/api';
+import {Button} from '@openng/optimus-ui/button';
+import {SplitButton} from '@openng/optimus-ui/splitbutton';
+import {ToggleSwitch} from '@openng/optimus-ui/toggleswitch';
 
 import {AppSettingsService} from '../../../shared/service/app-settings.service';
 import {BookMetadataManageService} from '../../book/service/book-metadata-manage.service';
 import {AppSettingKey, CoverCroppingSettings} from '../../../shared/model/app-settings.model';
-import {InputText} from 'primeng/inputtext';
-import {Slider} from 'primeng/slider';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Slider} from '@openng/optimus-ui/slider';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -30,6 +30,11 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
   styleUrl: './global-preferences.component.scss'
 })
 export class GlobalPreferencesComponent implements OnInit {
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly bookMetadataManageService = inject(BookMetadataManageService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   toggles = {
     autoBookSearch: false,
@@ -42,12 +47,6 @@ export class GlobalPreferencesComponent implements OnInit {
     aspectRatioThreshold: 2.5,
     smartCroppingEnabled: false
   };
-
-  private appSettingsService = inject(AppSettingsService);
-  private bookMetadataManageService = inject(BookMetadataManageService);
-  private messageService = inject(MessageService);
-  private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
 
   private readonly syncSettingsEffect = effect(() => {
     const settings = this.appSettingsService.appSettings();

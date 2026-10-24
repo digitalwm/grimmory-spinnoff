@@ -1,17 +1,17 @@
 import {Component, DestroyRef, inject, OnDestroy, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {KeyValuePipe} from '@angular/common';
-import {ProgressBar} from 'primeng/progressbar';
-import {Button} from 'primeng/button';
-import {Divider} from 'primeng/divider';
-import {Tooltip} from 'primeng/tooltip';
-import {MessageService} from 'primeng/api';
+import {ProgressBar} from '@openng/optimus-ui/progressbar';
+import {Button} from '@openng/optimus-ui/button';
+import {Divider} from '@openng/optimus-ui/divider';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {MessageService} from '@openng/optimus-ui/api';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 import {MetadataBatchProgressNotification, MetadataBatchStatus} from '../../model/metadata-batch-progress.model';
 import {MetadataProgressService} from '../../service/metadata-progress.service';
 import {MetadataTaskService} from '../../../features/book/service/metadata-task';
-import {Tag} from 'primeng/tag';
+import {Tag} from '@openng/optimus-ui/tag';
 import {TaskService} from '../../../features/settings/task-management/task.service';
 import {DialogLauncherService} from '../../services/dialog-launcher.service';
 
@@ -23,18 +23,17 @@ import {DialogLauncherService} from '../../services/dialog-launcher.service';
   imports: [KeyValuePipe, ProgressBar, Button, Divider, Tooltip, Tag, TranslocoDirective]
 })
 export class MetadataProgressWidgetComponent implements OnInit, OnDestroy {
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly dialogLauncherService = inject(DialogLauncherService);
+  private readonly metadataProgressService = inject(MetadataProgressService);
+  private readonly metadataTaskService = inject(MetadataTaskService);
+  private readonly taskService = inject(TaskService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
   activeTasks: Record<string, MetadataBatchProgressNotification> = {};
 
-  private readonly destroyRef = inject(DestroyRef);
-  private dialogLauncherService = inject(DialogLauncherService);
-  private metadataProgressService = inject(MetadataProgressService);
-  private metadataTaskService = inject(MetadataTaskService);
-  private taskService = inject(TaskService);
-  private messageService = inject(MessageService);
-  private readonly t = inject(TranslocoService);
-
-  private lastUpdateMap = new Map<string, number>();
-  private timeoutHandles = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly lastUpdateMap = new Map<string, number>();
+  private readonly timeoutHandles = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly TASK_STALL_TIMEOUT_MS = 60 * 1000; // 1 minute
 
   ngOnInit(): void {
@@ -76,7 +75,7 @@ export class MetadataProgressWidgetComponent implements OnInit, OnDestroy {
   private markTaskStalled(taskId: string): void {
     const task = this.activeTasks[taskId];
     if (!task) return;
-    if (task.status !== MetadataBatchStatus.COMPLETED && task.status !== 'ERROR') {
+    if (task.status !== MetadataBatchStatus.COMPLETED && task.status !== MetadataBatchStatus.ERROR) {
       this.activeTasks[taskId] = {
         ...task,
         status: MetadataBatchStatus.ERROR,
@@ -88,7 +87,7 @@ export class MetadataProgressWidgetComponent implements OnInit, OnDestroy {
 
   getProgressPercent(task: MetadataBatchProgressNotification): number {
     if (task.total <= 0) return 0;
-    if (task.status === 'COMPLETED') return 100;
+    if (task.status === MetadataBatchStatus.COMPLETED) return 100;
     return Math.round((task.completed / task.total) * 100);
   }
 

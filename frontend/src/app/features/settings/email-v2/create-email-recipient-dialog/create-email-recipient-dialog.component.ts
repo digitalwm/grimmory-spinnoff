@@ -1,12 +1,12 @@
 import {Component, inject} from '@angular/core';
 import {FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
-import {MessageService} from 'primeng/api';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
-import {Checkbox} from 'primeng/checkbox';
-import {Button} from 'primeng/button';
-import {InputText} from 'primeng/inputtext';
+import {MessageService} from '@openng/optimus-ui/api';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {Checkbox} from '@openng/optimus-ui/checkbox';
+import {Button} from '@openng/optimus-ui/button';
+import {InputText} from '@openng/optimus-ui/inputtext';
 import {EmailV2RecipientService} from '../email-v2-recipient/email-v2-recipient.service';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -24,12 +24,12 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
   styleUrls: ['./create-email-recipient-dialog.component.scss']
 })
 export class CreateEmailRecipientDialogComponent {
-  emailRecipientForm: FormGroup;
-  private fb = inject(FormBuilder);
-  private emailRecipientService = inject(EmailV2RecipientService);
-  private messageService = inject(MessageService);
-  private ref = inject(DynamicDialogRef);
+  private readonly fb = inject(FormBuilder);
+  private readonly emailRecipientService = inject(EmailV2RecipientService);
+  private readonly messageService = inject(MessageService);
+  private readonly ref = inject(DynamicDialogRef);
   private readonly t = inject(TranslocoService);
+  emailRecipientForm: FormGroup;
 
   constructor() {
     this.emailRecipientForm = this.fb.group({

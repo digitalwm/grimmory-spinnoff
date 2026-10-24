@@ -7,24 +7,28 @@ import {
   input,
   model,
   numberAttribute,
+  output,
   type ElementRef,
   viewChild,
 } from '@angular/core';
 import { transformedValue, type FormValueControl, type ParseResult } from '@angular/forms/signals';
-import { LucideChevronDown, LucideChevronUp } from '@lucide/angular';
+import { LucideChevronDown, LucideChevronUp, LucideMinus, LucidePlus, LucideX } from '@lucide/angular';
+import { TranslocoPipe } from '@jsverse/transloco';
 
 import { cn } from '../cn';
+import { AppControlTransitionDirective } from '../control.styles';
 import { APP_FIELD } from '../field/app-field.context';
 import { appInputVariants, type AppInputSize } from '../input/app-input.variants';
 
 @Component({
   selector: 'app-number-input',
   standalone: true,
-  imports: [LucideChevronDown, LucideChevronUp],
+  imports: [AppControlTransitionDirective, TranslocoPipe, LucideChevronDown, LucideChevronUp, LucideMinus, LucidePlus, LucideX],
   host: { class: 'relative block w-full' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <input
+      appControlTransition
       #input
       [class]="inputClass()"
       type="number"
@@ -44,33 +48,46 @@ import { appInputVariants, type AppInputSize } from '../input/app-input.variants
       [readonly]="readonly()"
       [required]="required()"
       (input)="onInput(input)"
-      (blur)="touched.set(true)" />
+      (blur)="onBlur()" />
 
-    @if (unit() || !readonly()) {
-      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-stretch">
+    @if (unit() || showSteppers() || showClear()) {
+      <div class="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-stretch">
+        @if (showClear()) {
+          <button
+            type="button"
+            [attr.aria-label]="'common.clear' | transloco"
+            data-clear
+            [class]="clearButtonClass + (value() === null ? ' invisible' : '')"
+            [disabled]="disabled()"
+            (click)="clear()">
+            <svg lucideX class="size-3.5 pointer-coarse:size-4" aria-hidden="true"></svg>
+          </button>
+        }
         @if (unit()) {
           <span class="flex select-none items-center pr-3 text-xs text-text-muted">{{ unit() }}</span>
         }
-        @if (!readonly()) {
+        @if (showSteppers()) {
           <span
-            class="pointer-events-auto my-px mr-px flex w-8 flex-col overflow-hidden rounded-r-[0.3rem] border-l border-border">
+            class="pointer-events-auto my-px mr-px flex w-8 flex-col overflow-hidden rounded-r-[0.3rem] border-l border-border pointer-coarse:w-20 pointer-coarse:flex-row-reverse">
             <button
               type="button"
               tabindex="-1"
               aria-hidden="true"
-              [class]="stepButtonClass"
+              [class]="stepButtonClass + ' pointer-coarse:border-l pointer-coarse:border-border'"
               [disabled]="disabled() || atMax()"
               (click)="nudge(1)">
-              <svg lucideChevronUp class="size-3" aria-hidden="true"></svg>
+              <svg lucideChevronUp class="size-3 pointer-coarse:hidden" aria-hidden="true"></svg>
+              <svg lucidePlus class="hidden size-4 pointer-coarse:block" aria-hidden="true"></svg>
             </button>
             <button
               type="button"
               tabindex="-1"
               aria-hidden="true"
-              [class]="stepButtonClass + ' border-t border-border'"
+              [class]="stepButtonClass + ' border-t border-border pointer-coarse:border-t-0'"
               [disabled]="disabled() || atMin()"
               (click)="nudge(-1)">
-              <svg lucideChevronDown class="size-3" aria-hidden="true"></svg>
+              <svg lucideChevronDown class="size-3 pointer-coarse:hidden" aria-hidden="true"></svg>
+              <svg lucideMinus class="hidden size-4 pointer-coarse:block" aria-hidden="true"></svg>
             </button>
           </span>
         }
@@ -79,12 +96,14 @@ import { appInputVariants, type AppInputSize } from '../input/app-input.variants
   `,
 })
 export class AppNumberInputComponent implements FormValueControl<number | null> {
+  private readonly fieldContext = inject(APP_FIELD, { optional: true });
   readonly value = model<number | null>(null);
   readonly disabled = input(false, { transform: booleanAttribute });
   readonly required = input(false, { transform: booleanAttribute });
   readonly invalid = input(false, { transform: booleanAttribute });
   readonly pending = input(false, { transform: booleanAttribute });
-  readonly touched = model(false);
+  readonly touched = input(false, { transform: booleanAttribute });
+  readonly touch = output<void>();
   readonly name = input('');
 
   readonly size = input<AppInputSize>('md');
@@ -92,6 +111,8 @@ export class AppNumberInputComponent implements FormValueControl<number | null> 
   readonly max = input<number | undefined>(undefined);
   readonly step = input(1, { transform: numberAttribute });
   readonly unit = input('');
+  readonly clearable = input(false, { transform: booleanAttribute });
+  readonly steppers = input(true, { transform: booleanAttribute });
   readonly inputId = input('');
   readonly placeholder = input('');
   readonly ariaLabel = input('');
@@ -103,8 +124,6 @@ export class AppNumberInputComponent implements FormValueControl<number | null> 
     parse: parseNumberInput,
     format: value => value?.toString() ?? '',
   });
-
-  private readonly fieldContext = inject(APP_FIELD, { optional: true });
   protected readonly resolvedInputId = computed(() => this.inputId() || this.fieldContext?.controlId() || null);
   protected readonly resolvedDescribedBy = computed(
     () => this.ariaDescribedBy() || this.fieldContext?.describedById() || null,
@@ -127,14 +146,29 @@ export class AppNumberInputComponent implements FormValueControl<number | null> 
   });
 
   protected readonly stepButtonClass =
-    'flex flex-1 items-center justify-center text-text-muted transition-colors ' +
+    'flex flex-1 items-center justify-center text-text-muted touch-manipulation transition-colors ' +
     'hover:bg-surface-hover hover:text-text-strong ' +
     'active:bg-[color-mix(in_srgb,var(--color-text)_14%,transparent)] active:text-text-strong ' +
     'disabled:pointer-events-none disabled:opacity-40';
 
+  protected readonly clearButtonClass =
+    'pointer-events-auto mr-1 flex w-6 cursor-pointer items-center justify-center text-text-muted ' +
+    'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary ' +
+    'touch-manipulation transition-colors hover:text-text-strong ' +
+    'disabled:pointer-events-none disabled:opacity-40 pointer-coarse:w-10';
+
+  protected readonly showClear = computed(() => this.clearable() && !this.readonly());
+  protected readonly showSteppers = computed(() => this.steppers() && !this.readonly());
+
   protected readonly inputPaddingClass = computed(() => {
-    if (this.unit()) return 'pr-16';
-    return this.readonly() ? '' : 'pr-9';
+    const clear = this.showClear();
+    if (this.unit()) {
+      return clear ? 'pr-23 pointer-coarse:pr-39' : 'pr-16 pointer-coarse:pr-28';
+    }
+    if (this.showSteppers()) {
+      return clear ? 'pr-16 pointer-coarse:pr-33' : 'pr-9 pointer-coarse:pr-22';
+    }
+    return clear ? 'pr-8 pointer-coarse:pr-11' : '';
   });
   protected readonly inputClass = computed(() =>
     cn(
@@ -158,6 +192,19 @@ export class AppNumberInputComponent implements FormValueControl<number | null> 
   protected nudge(direction: 1 | -1): void {
     const base = this.value() ?? this.min() ?? 0;
     this.value.set(this.roundToStep(this.clamp(base + direction * this.normalizedStep())));
+  }
+
+  protected clear(): void {
+    if (this.disabled() || this.readonly()) return;
+    this.touch.emit();
+    this.value.set(null);
+  }
+
+  protected onBlur(): void {
+    this.touch.emit();
+    if (this.rawValue.parseErrors().length > 0) {
+      this.rawValue.set(this.value()?.toString() ?? '');
+    }
   }
 
   private clamp(n: number): number {

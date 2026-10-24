@@ -1,9 +1,10 @@
-import { DOCUMENT, NgClass } from '@angular/common';
+import { DOCUMENT } from '@angular/common';
 import { computed, Component, DestroyRef, effect, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
+import { CdkScrollable } from '@angular/cdk/scrolling';
 import { LayoutService, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from '../layout.service';
 import { AppSidebarComponent } from '../layout-sidebar/app.sidebar.component';
 import { AppMobileTopbarComponent } from '../layout-mobile-topbar/app.mobile-topbar.component';
@@ -20,19 +21,18 @@ const SIDEBAR_KEYBOARD_PAGE_STEP = 48;
     AppSidebarComponent,
     AppMobileTopbarComponent,
     CdkTrapFocus,
-    NgClass,
+    CdkScrollable,
     TranslocoDirective
   ],
   templateUrl: './app.layout.component.html'
 })
 export class AppLayoutComponent {
   readonly layoutService = inject(LayoutService);
-  readonly sidebarMinWidth = SIDEBAR_MIN_WIDTH;
-  readonly sidebarMaxWidth = SIDEBAR_MAX_WIDTH;
-
   private readonly router = inject(Router);
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
+  readonly sidebarMinWidth = SIDEBAR_MIN_WIDTH;
+  readonly sidebarMaxWidth = SIDEBAR_MAX_WIDTH;
 
   private resizeStartX = 0;
   private resizeStartWidth = 0;

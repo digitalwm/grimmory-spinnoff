@@ -61,7 +61,7 @@ type SummaryLayout = 'list' | 'inline';
               } @else {
                 <button
                   type="button"
-                  class="block w-full truncate text-left font-medium text-current underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                  class="block w-full truncate text-left font-medium text-current underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current pointer-coarse:py-1"
                   (click)="focusAdjacentSummaryIssue(1)">
                   {{ activeIssueMessage() }}
                 </button>
@@ -75,7 +75,7 @@ type SummaryLayout = 'list' | 'inline';
                   <li>
                     <button
                       type="button"
-                      class="rounded-sm text-left text-current underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                      class="rounded-sm text-left text-current underline underline-offset-2 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current pointer-coarse:py-1"
                       (click)="focusIssue(issue)">
                       {{ issueLabel(issue) }}
                     </button>
@@ -94,15 +94,14 @@ type SummaryLayout = 'list' | 'inline';
   `,
 })
 export class AppMessageComponent {
+  private readonly transloco = inject(TranslocoService);
+  private readonly document = inject(DOCUMENT);
   readonly color = input<MessageColor>('neutral');
   readonly field = input<AppFieldLike | undefined>(undefined);
   readonly summary = input(false, { transform: booleanAttribute });
   readonly summaryLayout = input<SummaryLayout>('list');
   readonly inline = input(false, { transform: booleanAttribute });
   readonly styleClass = input('');
-
-  private readonly transloco = inject(TranslocoService);
-  private readonly document = inject(DOCUMENT);
   private readonly activeLang = toSignal(this.transloco.langChanges$, { initialValue: this.transloco.getActiveLang() });
   private readonly summaryIssueIndex = signal(0);
 

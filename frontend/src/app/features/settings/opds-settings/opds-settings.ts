@@ -1,24 +1,24 @@
 import {Component, DestroyRef, WritableSignal, effect, inject, signal, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 
-import {Button} from 'primeng/button';
-import {InputText} from 'primeng/inputtext';
+import {Button} from '@openng/optimus-ui/button';
+import {InputText} from '@openng/optimus-ui/inputtext';
 import {API_CONFIG} from '../../../core/config/api-config';
-import {Tooltip} from 'primeng/tooltip';
-import {TableModule} from 'primeng/table';
-import {Dialog} from 'primeng/dialog';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {TableModule} from '@openng/optimus-ui/table';
+import {Dialog} from '@openng/optimus-ui/dialog';
 import {FormsModule} from '@angular/forms';
-import {ConfirmDialog} from 'primeng/confirmdialog';
-import {ConfirmationService, MessageService} from 'primeng/api';
+import {ConfirmDialog} from '@openng/optimus-ui/confirmdialog';
+import {ConfirmationService, MessageService} from '@openng/optimus-ui/api';
 import {OpdsService, OpdsSortOrder, OpdsUserV2, OpdsUserV2CreateRequest} from './opds.service';
 import {catchError} from 'rxjs/operators';
 import {UserService} from '../user-management/user.service';
 import {of} from 'rxjs';
-import {ToggleSwitch} from 'primeng/toggleswitch';
+import {ToggleSwitch} from '@openng/optimus-ui/toggleswitch';
 import {AppSettingsService} from '../../../shared/service/app-settings.service';
 import {AppSettingKey, AppSettings} from '../../../shared/model/app-settings.model';
 import {ExternalDocLinkComponent} from '../../../shared/components/external-doc-link/external-doc-link.component';
-import {Select} from 'primeng/select';
+import {Select} from '@openng/optimus-ui/select';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -42,6 +42,13 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
   styleUrl: './opds-settings.scss'
 })
 export class OpdsSettings implements OnInit {
+  private readonly opdsService = inject(OpdsService);
+  private readonly confirmationService = inject(ConfirmationService);
+  private readonly messageService = inject(MessageService);
+  private readonly userService = inject(UserService);
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
 
   opdsEndpoint = `${API_CONFIG.BASE_URL}/api/v1/opds`;
   komgaEndpoint = `${API_CONFIG.BASE_URL}/komga`;
@@ -49,15 +56,8 @@ export class OpdsSettings implements OnInit {
   komgaApiEnabled = false;
   komgaGroupUnknown = true;
 
-  private opdsService = inject(OpdsService);
-  private confirmationService = inject(ConfirmationService);
-  private messageService = inject(MessageService);
-  private userService = inject(UserService);
-  private appSettingsService = inject(AppSettingsService);
-  private t = inject(TranslocoService);
-
-  users: WritableSignal<OpdsUserV2[]> = signal([]);
-  loading = signal(false);
+  readonly users: WritableSignal<OpdsUserV2[]> = signal([]);
+  readonly loading = signal(false);
   showCreateUserDialog = false;
   newUser: OpdsUserV2CreateRequest = {username: '', password: '', sortOrder: 'RECENT'};
   passwordVisibility: boolean[] = [];
@@ -65,8 +65,6 @@ export class OpdsSettings implements OnInit {
 
   editingUserId: number | null = null;
   editingSortOrder: OpdsSortOrder | null = null;
-
-  private readonly destroyRef = inject(DestroyRef);
   dummyPassword: string = "***********************";
 
   sortOrderOptions = [
@@ -142,7 +140,7 @@ export class OpdsSettings implements OnInit {
       })
     ).subscribe(users => {
       this.users.set([...users]);
-      this.passwordVisibility = new Array(users.length).fill(false);
+      this.passwordVisibility = Array.from({length: users.length}, () => false);
       this.loading.set(false);
     });
   }
@@ -197,9 +195,21 @@ export class OpdsSettings implements OnInit {
   }
 
   copyEndpoint(): void {
-    navigator.clipboard.writeText(this.opdsEndpoint).then(() => {
-      this.showMessage('success', this.t.translate('common.success'), this.t.translate('settingsOpds.opdsCopied'));
-    });
+    navigator.clipboard.writeText(this.opdsEndpoint)
+      .then(() => {
+        this.showMessage(
+          'success',
+          this.t.translate('common.success'),
+          this.t.translate('settingsOpds.opdsCopied')
+        );
+      })
+      .catch(() => {
+        this.showMessage(
+          'error',
+          this.t.translate('common.error'),
+          this.t.translate('settingsOpds.copyFailed')
+        );
+      });
   }
 
   toggleOpdsServer(): void {
@@ -221,9 +231,21 @@ export class OpdsSettings implements OnInit {
   }
 
   copyKomgaEndpoint(): void {
-    navigator.clipboard.writeText(this.komgaEndpoint).then(() => {
-      this.showMessage('success', this.t.translate('common.success'), this.t.translate('settingsOpds.komgaCopied'));
-    });
+    navigator.clipboard.writeText(this.komgaEndpoint)
+      .then(() => {
+        this.showMessage(
+          'success',
+          this.t.translate('common.success'),
+          this.t.translate('settingsOpds.komgaCopied')
+        );
+      })
+      .catch(() => {
+        this.showMessage(
+          'error',
+          this.t.translate('common.error'),
+          this.t.translate('settingsOpds.copyFailed')
+        );
+      });
   }
 
   toggleKomgaGroupUnknown(): void {

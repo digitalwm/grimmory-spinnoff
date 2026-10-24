@@ -1,9 +1,9 @@
 import {Component, effect, inject, OnDestroy, signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {TableModule} from 'primeng/table';
-import {DynamicDialogConfig, DynamicDialogRef} from 'primeng/dynamicdialog';
-import {MessageService} from 'primeng/api';
+import {Button} from '@openng/optimus-ui/button';
+import {TableModule} from '@openng/optimus-ui/table';
+import {DynamicDialogConfig, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {MessageService} from '@openng/optimus-ui/api';
 import {takeUntil} from 'rxjs/operators';
 import {Subject} from 'rxjs';
 
@@ -12,7 +12,7 @@ import {Book} from '../../../features/book/model/book.model';
 import {FileMoveRequest, FileOperationsService} from '../../service/file-operations.service';
 import {LibraryService} from "../../../features/book/service/library.service";
 import {AppSettingsService} from '../../service/app-settings.service';
-import {Select} from 'primeng/select';
+import {Select} from '@openng/optimus-ui/select';
 import {Library, LibraryPath} from '../../../features/book/model/library.model';
 import {replacePlaceholders} from '../../util/pattern-resolver';
 
@@ -41,14 +41,14 @@ interface FilePreview {
   styleUrl: './file-mover-component.scss'
 })
 export class FileMoverComponent implements OnDestroy {
-  private config = inject(DynamicDialogConfig);
+  private readonly config = inject(DynamicDialogConfig);
   ref = inject(DynamicDialogRef);
-  private bookService = inject(BookService);
-  private libraryService = inject(LibraryService);
-  private fileOperationsService = inject(FileOperationsService);
-  private messageService = inject(MessageService);
-  private appSettingsService = inject(AppSettingsService);
-  private destroy$ = new Subject<void>();
+  private readonly bookService = inject(BookService);
+  private readonly libraryService = inject(LibraryService);
+  private readonly fileOperationsService = inject(FileOperationsService);
+  private readonly messageService = inject(MessageService);
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly destroy$ = new Subject<void>();
   private readonly appSettings = this.appSettingsService.appSettings;
   private readonly syncLibraryPatternsEffect = effect(() => {
     const settings = this.appSettings();
@@ -108,13 +108,13 @@ export class FileMoverComponent implements OnDestroy {
     bookCount: number;
   }[] = [];
   defaultMovePattern = '';
-  loading = signal(false);
+  readonly loading = signal(false);
   patternsCollapsed = true;
   infoCollapsed = true;
 
   bookIds = new Set<number>();
   books: Book[] = [];
-  filePreviews = signal<FilePreview[]>([]);
+  readonly filePreviews = signal<FilePreview[]>([]);
   defaultTargetLibraryId: number | null = null;
   defaultTargetLibraryPathId: number | null = null;
   defaultAvailableLibraryPaths: LibraryPath[] = [];
@@ -292,7 +292,7 @@ export class FileMoverComponent implements OnDestroy {
 
     const libraries = this.libraryService.libraries();
     const library = libraries.find((lib: Library) => lib.id === libraryId);
-    return library?.paths || [];
+    return library?.paths ?? [];
   }
 
   private getLibraryPathById(libraryId: number | null): string {

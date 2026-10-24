@@ -2,17 +2,16 @@ import {inject, Injectable} from '@angular/core';
 import {Observable, of} from 'rxjs';
 import {catchError, map} from 'rxjs/operators';
 import {BookMarkService} from '../../../../../shared/service/book-mark.service';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {TranslocoService} from '@jsverse/transloco';
 
 @Injectable()
 export class ReaderBookmarkService {
+  private readonly bookMarkService = inject(BookMarkService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
   private currentCFI: string | null = null;
   private currentChapterName: string | null = null;
-
-  private bookMarkService = inject(BookMarkService);
-  private messageService = inject(MessageService);
-  private readonly t = inject(TranslocoService);
 
 
   updateCurrentPosition(cfi: string, chapterName?: string): void {

@@ -1,17 +1,17 @@
 import {ChangeDetectorRef, Component, inject, OnDestroy, OnInit, ViewChild} from '@angular/core';
 
 import {FormsModule} from '@angular/forms';
-import {DynamicDialogConfig, DynamicDialogRef} from 'primeng/dynamicdialog';
-import {Select} from 'primeng/select';
-import {Button} from 'primeng/button';
-import {FileSelectEvent, FileUpload, FileUploadHandlerEvent} from 'primeng/fileupload';
-import {Badge} from 'primeng/badge';
-import {Tooltip} from 'primeng/tooltip';
+import {DynamicDialogConfig, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {Select} from '@openng/optimus-ui/select';
+import {Button} from '@openng/optimus-ui/button';
+import {FileSelectEvent, FileUpload, FileUploadHandlerEvent} from '@openng/optimus-ui/fileupload';
+import {Badge} from '@openng/optimus-ui/badge';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {Subject} from 'rxjs';
 import {BookFileService} from '../../service/book-file.service';
 import {AppSettingsService} from '../../../../shared/service/app-settings.service';
 import {AdditionalFileType, Book} from '../../model/book.model';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 interface FileTypeOption {
@@ -42,12 +42,12 @@ interface UploadingFile {
 })
 export class AdditionalFileUploaderComponent implements OnInit, OnDestroy {
   private readonly t = inject(TranslocoService);
-  private dialogRef = inject(DynamicDialogRef);
-  private config = inject(DynamicDialogConfig);
-  private bookFileService = inject(BookFileService);
-  private appSettingsService = inject(AppSettingsService);
-  private messageService = inject(MessageService);
-  private cdr = inject(ChangeDetectorRef);
+  private readonly dialogRef = inject(DynamicDialogRef);
+  private readonly config = inject(DynamicDialogConfig);
+  private readonly bookFileService = inject(BookFileService);
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly messageService = inject(MessageService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   book!: Book;
   files: UploadingFile[] = [];
@@ -60,8 +60,8 @@ export class AdditionalFileUploaderComponent implements OnInit, OnDestroy {
 
   fileTypeOptions: FileTypeOption[] = [];
 
-  @ViewChild(FileUpload) private fileUpload!: FileUpload;
-  private destroy$ = new Subject<void>();
+  @ViewChild(FileUpload) private readonly fileUpload!: FileUpload;
+  private readonly destroy$ = new Subject<void>();
 
   ngOnInit(): void {
     this.book = this.config.data.book;

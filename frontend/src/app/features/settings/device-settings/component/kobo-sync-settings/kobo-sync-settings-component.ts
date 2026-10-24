@@ -1,23 +1,23 @@
 import {Component, DestroyRef, effect, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {ConfirmationService, MessageService} from 'primeng/api';
+import {ConfirmationService, MessageService} from '@openng/optimus-ui/api';
 import {KoboService, KoboSyncSettings} from './kobo.service';
 import {FormBuilder, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {InputText} from 'primeng/inputtext';
-import {ConfirmDialog} from 'primeng/confirmdialog';
+import {Button} from '@openng/optimus-ui/button';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {ConfirmDialog} from '@openng/optimus-ui/confirmdialog';
 import {UserService} from '../../../user-management/user.service';
 import {Subject} from 'rxjs';
 import {debounceTime} from 'rxjs/operators';
-import {ToggleSwitch} from 'primeng/toggleswitch';
-import {Slider} from 'primeng/slider';
-import {Divider} from 'primeng/divider';
+import {ToggleSwitch} from '@openng/optimus-ui/toggleswitch';
+import {Slider} from '@openng/optimus-ui/slider';
+import {Divider} from '@openng/optimus-ui/divider';
 import {AppSettingsService} from '../../../../../shared/service/app-settings.service';
 import {SettingsHelperService} from '../../../../../shared/service/settings-helper.service';
 import {AppSettingKey, AppSettings, KoboSettings} from '../../../../../shared/model/app-settings.model';
 import {ShelfService} from '../../../../book/service/shelf.service';
 import {ExternalDocLinkComponent} from '../../../../../shared/components/external-doc-link/external-doc-link.component';
-import {Toast} from 'primeng/toast';
+import {Toast} from '@openng/optimus-ui/toast';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -30,13 +30,13 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 })
 export class KoboSyncSettingsComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
-  private koboService = inject(KoboService);
-  private messageService = inject(MessageService);
-  private confirmationService = inject(ConfirmationService);
+  private readonly koboService = inject(KoboService);
+  private readonly messageService = inject(MessageService);
+  private readonly confirmationService = inject(ConfirmationService);
   protected userService = inject(UserService);
   protected appSettingsService = inject(AppSettingsService);
   protected settingsHelperService = inject(SettingsHelperService);
-  private shelfService = inject(ShelfService);
+  private readonly shelfService = inject(ShelfService);
   private readonly t = inject(TranslocoService);
 
   private readonly destroyRef = inject(DestroyRef);
@@ -47,6 +47,12 @@ export class KoboSyncSettingsComponent implements OnInit {
   isAdmin = false;
   credentialsSaved = false;
   showToken = false;
+  readonly koboApiBase = `${window.location.origin}/api/kobo`;
+
+  get koboApiPath(): string {
+    const token = this.syncForm.controls.token.value;
+    return token ? `${this.koboApiBase}/${token}` : '';
+  }
 
   readonly syncForm = this.fb.nonNullable.group({
     token: [''],
@@ -54,7 +60,6 @@ export class KoboSyncSettingsComponent implements OnInit {
     progressMarkAsReadingThreshold: [1],
     progressMarkAsFinishedThreshold: [99],
     autoAddToShelf: [true],
-    twoWayProgressSync: [false],
   });
 
   koboSettings: KoboSettings = {
@@ -151,7 +156,6 @@ export class KoboSyncSettingsComponent implements OnInit {
       progressMarkAsReadingThreshold: settings.progressMarkAsReadingThreshold ?? 1,
       progressMarkAsFinishedThreshold: settings.progressMarkAsFinishedThreshold ?? 99,
       autoAddToShelf: settings.autoAddToShelf ?? true,
-      twoWayProgressSync: settings.twoWayProgressSync ?? false,
     };
 
     for (const [key, value] of Object.entries(next)) {
@@ -187,7 +191,7 @@ export class KoboSyncSettingsComponent implements OnInit {
         summary: this.t.translate('settingsDevice.copied'),
         detail: this.t.translate('settingsDevice.copiedDetail', {label})
       });
-    }).catch(err => {
+    }).catch((err: unknown) => {
       console.error('Copy failed', err);
       this.messageService.add({
         severity: 'error',
@@ -258,13 +262,6 @@ export class KoboSyncSettingsComponent implements OnInit {
     const message = checked
       ? this.t.translate('settingsDevice.kobo.autoAddEnabled')
       : this.t.translate('settingsDevice.kobo.autoAddDisabled');
-    this.updateKoboSettings(message);
-  }
-
-  onTwoWaySyncToggle(checked: boolean) {
-    const message = checked
-      ? this.t.translate('settingsDevice.kobo.twoWaySyncEnabled')
-      : this.t.translate('settingsDevice.kobo.twoWaySyncDisabled');
     this.updateKoboSettings(message);
   }
 

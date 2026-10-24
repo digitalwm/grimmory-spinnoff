@@ -1,14 +1,14 @@
 import {Component, DestroyRef, inject, Input, OnChanges, OnInit, signal, SimpleChanges} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {Button} from 'primeng/button';
-import {Dialog} from 'primeng/dialog';
-import {InputText} from 'primeng/inputtext';
-import {Textarea} from 'primeng/textarea';
-import {ConfirmDialog} from 'primeng/confirmdialog';
-import {ProgressSpinner} from 'primeng/progressspinner';
-import {Tooltip} from 'primeng/tooltip';
-import {ConfirmationService, MessageService} from 'primeng/api';
+import {Button} from '@openng/optimus-ui/button';
+import {Dialog} from '@openng/optimus-ui/dialog';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Textarea} from '@openng/optimus-ui/textarea';
+import {ConfirmDialog} from '@openng/optimus-ui/confirmdialog';
+import {ProgressSpinner} from '@openng/optimus-ui/progressspinner';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {ConfirmationService, MessageService} from '@openng/optimus-ui/api';
 import {TranslocoService} from '@jsverse/transloco';
 import {BookNote, BookNoteService, CreateBookNoteRequest} from '../../../../shared/service/book-note.service';
 
@@ -29,16 +29,15 @@ import {BookNote, BookNoteService, CreateBookNoteRequest} from '../../../../shar
   styleUrl: './book-notes-component.scss'
 })
 export class BookNotesComponent implements OnInit, OnChanges {
+  private readonly bookNoteService = inject(BookNoteService);
+  private readonly confirmationService = inject(ConfirmationService);
+  private readonly messageService = inject(MessageService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly t = inject(TranslocoService);
   @Input() bookId!: number;
 
-  private bookNoteService = inject(BookNoteService);
-  private confirmationService = inject(ConfirmationService);
-  private messageService = inject(MessageService);
-  private destroyRef = inject(DestroyRef);
-  private readonly t = inject(TranslocoService);
-
   notes: BookNote[] = [];
-  loading = signal(false);
+  readonly loading = signal(false);
   showCreateDialog = false;
   showEditDialog = false;
   selectedNote: BookNote | null = null;
@@ -62,7 +61,7 @@ export class BookNotesComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['bookId'] && changes['bookId'].currentValue) {
+    if (changes['bookId']?.currentValue) {
       this.loadNotes();
     }
   }

@@ -1,13 +1,13 @@
 import {Component, inject, OnInit, signal, WritableSignal, computed} from '@angular/core';
 import {FormsModule} from '@angular/forms';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {CustomSvgService} from '../../services/custom-svg.service';
 import {CustomSvgCacheService} from '../../services/custom-svg-cache.service';
 import DOMPurify from 'dompurify';
 import {UrlHelperService} from '../../service/url-helper.service';
-import {MessageService} from 'primeng/api';
-import {Button} from 'primeng/button';
-import {Tab, TabList, TabPanel, TabPanels, Tabs} from 'primeng/tabs';
+import {MessageService} from '@openng/optimus-ui/api';
+import {Button} from '@openng/optimus-ui/button';
+import {Tab, TabList, TabPanel, TabPanels, Tabs} from '@openng/optimus-ui/tabs';
 import {UserService} from '../../../features/settings/user-management/user.service';
 import {from, of} from 'rxjs';
 import {catchError, mergeMap, toArray} from 'rxjs/operators';
@@ -56,6 +56,12 @@ const lucideIconNodes = iconNodes as unknown as Record<string, LucideIconNode[]>
   styleUrl: './icon-picker-component.scss'
 })
 export class IconPickerComponent implements OnInit {
+  ref = inject(DynamicDialogRef);
+  customSvgService = inject(CustomSvgService);
+  customSvgCache = inject(CustomSvgCacheService);
+  urlHelper = inject(UrlHelperService);
+  messageService = inject(MessageService);
+  userService = inject(UserService);
 
   private readonly hasLoadedSvgIcons: WritableSignal<boolean> = signal(false);
 
@@ -74,13 +80,6 @@ export class IconPickerComponent implements OnInit {
     LOAD_ICONS_ERROR: 'Failed to load SVG icons. Please try again.',
     DELETE_ERROR: 'Failed to delete icon. Please try again.'
   };
-
-  ref = inject(DynamicDialogRef);
-  customSvgService = inject(CustomSvgService);
-  customSvgCache = inject(CustomSvgCacheService);
-  urlHelper = inject(UrlHelperService);
-  messageService = inject(MessageService);
-  userService = inject(UserService);
 
   searchText: string = '';
   selectedIcon: string | null = null;
@@ -107,16 +106,16 @@ export class IconPickerComponent implements OnInit {
   svgContent: string = '';
   svgName: string = '';
   svgPreview: string | null = null;
-  errorMessage: WritableSignal<string> = signal('');
+  readonly errorMessage: WritableSignal<string> = signal('');
 
-  svgEntries: WritableSignal<SvgEntry[]> = signal([]);
-  isSavingBatch: WritableSignal<boolean> = signal(false);
-  batchErrorMessage: WritableSignal<string> = signal('');
+  readonly svgEntries: WritableSignal<SvgEntry[]> = signal([]);
+  readonly isSavingBatch: WritableSignal<boolean> = signal(false);
+  readonly batchErrorMessage: WritableSignal<string> = signal('');
 
-  svgIcons: WritableSignal<string[]> = signal([]);
-  svgSearchText: WritableSignal<string> = signal('');
-  isLoadingSvgIcons: WritableSignal<boolean> = signal(false);
-  svgIconsError: WritableSignal<string> = signal('');
+  readonly svgIcons: WritableSignal<string[]> = signal([]);
+  readonly svgSearchText: WritableSignal<string> = signal('');
+  readonly isLoadingSvgIcons: WritableSignal<boolean> = signal(false);
+  readonly svgIconsError: WritableSignal<string> = signal('');
   selectedSvgIcon: string | null = null;
 
   draggedSvgIcon: string | null = null;

@@ -2,17 +2,16 @@ import {ChangeDetectionStrategy, computed, Component, DestroyRef, effect, inject
 import {UpperCasePipe} from '@angular/common';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Book, BookRecommendation, BookType, FileInfo} from '../../../../../book/model/book.model';
-import {Tab, TabList, TabPanel, TabPanels, Tabs} from 'primeng/tabs';
+import {Tab, TabList, TabPanel, TabPanels, Tabs} from '@openng/optimus-ui/tabs';
 import {InfiniteScrollDirective} from 'ngx-infinite-scroll';
 import {BookCardLiteComponent} from '../../../../../book/components/book-card-lite/book-card-lite-component';
 import {BookReviewsComponent} from '../../../../../book/components/book-reviews/book-reviews.component';
 import {BookNotesComponent} from '../../../../../book/components/book-notes/book-notes-component';
 import {BookReadingSessionsComponent} from '../../book-reading-sessions/book-reading-sessions.component';
-import {Button} from 'primeng/button';
-import {Tooltip} from 'primeng/tooltip';
-import {Image} from 'primeng/image';
+import {Button} from '@openng/optimus-ui/button';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {UrlHelperService} from '../../../../../../shared/service/url-helper.service';
-import {CoverPlaceholderComponent} from '../../../../../../shared/components/cover-generator/cover-generator.component';
+import {CoverComponent} from '../../../../../../shared/components/cover/cover.component';
 import {BookMetadataManageService} from '../../../../../book/service/book-metadata-manage.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {AudiobookService} from '../../../../../readers/audiobook-player/audiobook.service';
@@ -85,24 +84,22 @@ const metadataTab = (value: MetadataTabValue, icon: string, labelKey: string): M
     Button,
     Tooltip,
     UpperCasePipe,
-    Image,
     TranslocoDirective,
-    CoverPlaceholderComponent
+    CoverComponent
   ],
   templateUrl: './metadata-tabs.component.html',
   styleUrl: './metadata-tabs.component.scss'
 })
 export class MetadataTabsComponent {
+  protected urlHelper = inject(UrlHelperService);
+  private readonly bookMetadataManageService = inject(BookMetadataManageService);
+  private readonly audiobookService = inject(AudiobookService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly book = input.required<Book>();
   readonly bookInSeries = input<Book[]>([]);
   readonly hasSeries = input(false);
   readonly recommendedBooks = input<BookRecommendation[]>([]);
-
-  protected urlHelper = inject(UrlHelperService);
-  private bookMetadataManageService = inject(BookMetadataManageService);
-  private audiobookService = inject(AudiobookService);
-  private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
 
   readonly audiobookInfo = linkedSignal<number, AudiobookInfo | null>({
     source: () => this.book().id,

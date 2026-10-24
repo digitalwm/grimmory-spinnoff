@@ -25,6 +25,8 @@ import java.util.Map;
 @AllArgsConstructor
 @Service
 public class KoreaderService {
+    private static final String DEFAULT_DEVICE_NAME = "Grimmory";
+    private static final String DEFAULT_DEVICE_ID = "Grimmory";
 
     private final UserBookProgressRepository progressRepository;
     private final UserBookFileProgressRepository fileProgressRepository;
@@ -56,13 +58,21 @@ public class KoreaderService {
                 ? progress.getKoreaderLastSyncTime().getEpochSecond()
                 : null;
 
+        String device = progress.getKoreaderDevice() != null ?
+                progress.getKoreaderDevice() :
+                DEFAULT_DEVICE_NAME;
+
+        String deviceId = progress.getKoreaderDeviceId() != null ?
+                progress.getKoreaderDeviceId() :
+                DEFAULT_DEVICE_ID;
+
         return KoreaderProgress.builder()
                 .timestamp(timestamp)
                 .document(bookHash)
                 .progress(progress.getKoreaderProgress())
                 .percentage(progress.getKoreaderProgressPercent())
-                .device("BookLore")
-                .device_id("BookLore")
+                .device(device)
+                .device_id(deviceId)
                 .build();
     }
 
@@ -75,7 +85,7 @@ public class KoreaderService {
         UserBookProgressEntity userProgress = getOrCreateUserProgress(user, book);
         Float previousProgressPercent = userProgress.getKoreaderProgressPercent();
         ReadStatus previousReadStatus = userProgress.getReadStatus();
-        updateProgressData(userProgress, koProgress, authDetails.isSyncWithWebReader(), book);
+        updateProgressData(userProgress, koProgress, book);
 
         progressRepository.save(userProgress);
 
@@ -98,7 +108,6 @@ public class KoreaderService {
         try {
             koreaderUserRepository.findByBookLoreUserId(userId)
                     .filter(KoreaderUserEntity::isSyncEnabled)
-                    .filter(KoreaderUserEntity::isSyncWithWebReader)
                     .ifPresent(koreaderUser -> {
                         BookEntity book = bookRepository.findById(bookId).orElse(null);
                         BookLoreUserEntity user = userRepository.findById(userId).orElse(null);
@@ -113,6 +122,9 @@ public class KoreaderService {
                         progress.setKoreaderProgressPercent(koreaderPercent);
                         progress.setKoreaderLastSyncTime(Instant.now());
                         progress.setKoreaderProgress(null);
+
+                        progress.setKoreaderDevice(DEFAULT_DEVICE_NAME);
+                        progress.setKoreaderDeviceId(DEFAULT_DEVICE_ID);
 
                         BookFileEntity primaryFile = book.getPrimaryBookFile();
                         if (primaryFile != null && primaryFile.getBookType() == BookFileType.EPUB
@@ -170,14 +182,14 @@ public class KoreaderService {
         }
     }
 
-    private void updateProgressData(UserBookProgressEntity userProgress, KoreaderProgress koProgress, boolean syncWithWebReader, BookEntity book) {
+    private void updateProgressData(UserBookProgressEntity userProgress, KoreaderProgress koProgress, BookEntity book) {
         userProgress.setKoreaderProgress(koProgress.getProgress());
         userProgress.setKoreaderProgressPercent(koProgress.getPercentage());
         userProgress.setKoreaderDevice(koProgress.getDevice());
         userProgress.setKoreaderDeviceId(koProgress.getDevice_id());
         userProgress.setKoreaderLastSyncTime(Instant.now());
         userProgress.setLastReadTime(Instant.now());
-        if (syncWithWebReader && koProgress.getProgress() != null) {
+        if (koProgress.getProgress() != null) {
             try {
                 String cfi = epubCfiService.convertXPointerToCfi(book.getFullFilePath(), koProgress.getProgress());
 

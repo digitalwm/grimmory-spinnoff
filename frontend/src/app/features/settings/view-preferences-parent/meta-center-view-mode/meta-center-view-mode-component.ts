@@ -1,7 +1,7 @@
 import {Component, effect, inject} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {UserService} from '../../user-management/user.service';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -14,12 +14,11 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
   styleUrl: './meta-center-view-mode-component.scss'
 })
 export class MetaCenterViewModeComponent {
+  private readonly userService = inject(UserService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
   viewMode: 'route' | 'dialog' = 'route';
   seriesViewMode: boolean = false;
-
-  private userService = inject(UserService);
-  private messageService = inject(MessageService);
-  private t = inject(TranslocoService);
   private hasInitialized = false;
 
   constructor() {

@@ -1,16 +1,23 @@
 import { Component, computed, inject, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild, Signal, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DynamicDialogRef, DynamicDialogConfig } from 'primeng/dynamicdialog';
-import { AutoComplete, AutoCompleteSelectEvent } from 'primeng/autocomplete';
-import { Button } from 'primeng/button';
-import { Checkbox } from 'primeng/checkbox';
+import { DynamicDialogRef, DynamicDialogConfig } from '@openng/optimus-ui/dynamicdialog';
+import { AutoComplete, AutoCompleteSelectEvent } from '@openng/optimus-ui/autocomplete';
+import { Button } from '@openng/optimus-ui/button';
+import { Checkbox } from '@openng/optimus-ui/checkbox';
 import { Subject, takeUntil } from 'rxjs';
 import { BookService } from '../../service/book.service';
 import { BookFileService } from '../../service/book-file.service';
 import { Book } from '../../model/book.model';
-import { MessageService, PrimeTemplate } from 'primeng/api';
+import { MessageService } from '@openng/optimus-ui/api';
 import { TranslocoDirective, TranslocoPipe, TranslocoService } from '@jsverse/transloco';
 import { AppSettingsService } from '../../../../shared/service/app-settings.service';
+
+export interface BookFileAttacherSourceBook {
+  id: number;
+  libraryId: number;
+  metadata?: {title?: string; authors?: string[]};
+  primaryFile?: {extension?: string; bookType?: string; fileName?: string};
+}
 
 @Component({
   selector: 'app-book-file-attacher',
@@ -22,15 +29,21 @@ import { AppSettingsService } from '../../../../shared/service/app-settings.serv
     Checkbox,
     TranslocoDirective,
     TranslocoPipe,
-    PrimeTemplate,
   ],
   templateUrl: './book-file-attacher.component.html',
   styleUrls: ['./book-file-attacher.component.scss']
 })
 export class BookFileAttacherComponent implements OnInit, AfterViewInit, OnDestroy {
+  private readonly t = inject(TranslocoService);
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly dialogRef = inject(DynamicDialogRef);
+  private readonly config = inject(DynamicDialogConfig);
+  private readonly bookService = inject(BookService);
+  private readonly bookFileService = inject(BookFileService);
+  private readonly messageService = inject(MessageService);
   @ViewChild('autocompleteWrapper') autocompleteWrapper!: ElementRef;
 
-  sourceBooks: Book[] = [];
+  sourceBooks: readonly BookFileAttacherSourceBook[] = [];
   targetBook: Book | null = null;
   moveFiles = false;
   isAttaching = false;
@@ -38,16 +51,8 @@ export class BookFileAttacherComponent implements OnInit, AfterViewInit, OnDestr
   filteredBooks: Book[] = [];
   autocomplePanelStyle: Record<string, string> = {};
 
-  private destroy$ = new Subject<void>();
+  private readonly destroy$ = new Subject<void>();
   private allBooks: Signal<Book[]> = signal([]);
-
-  private readonly t = inject(TranslocoService);
-  private readonly appSettingsService = inject(AppSettingsService);
-  private dialogRef = inject(DynamicDialogRef);
-  private config = inject(DynamicDialogConfig);
-  private bookService = inject(BookService);
-  private bookFileService = inject(BookFileService);
-  private messageService = inject(MessageService);
 
   ngAfterViewInit(): void {
     setTimeout(() => {
@@ -129,7 +134,7 @@ export class BookFileAttacherComponent implements OnInit, AfterViewInit, OnDestr
     return authors ? `${title} - ${authors}` : title;
   }
 
-  getSourceFileInfo(book: Book): string {
+  getSourceFileInfo(book: BookFileAttacherSourceBook): string {
     const file = book.primaryFile;
     if (!file) return this.t.translate('book.fileAttacher.unknownFile');
     const format = file.extension?.toUpperCase() || file.bookType || this.t.translate('book.fileAttacher.unknownFormat');

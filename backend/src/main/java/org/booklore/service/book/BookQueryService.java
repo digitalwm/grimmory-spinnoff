@@ -1,5 +1,6 @@
 package org.booklore.service.book;
 
+import jakarta.persistence.criteria.From;
 import lombok.RequiredArgsConstructor;
 import org.booklore.app.specification.AppBookSpecification;
 import org.booklore.mapper.v2.BookMapperV2;
@@ -8,9 +9,11 @@ import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.BookRecommendationLite;
 import org.booklore.model.dto.ComicMetadata;
 import org.booklore.model.entity.BookEntity;
+import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.repository.BookRepository;
 import org.booklore.repository.UserContentRestrictionRepository;
 import org.booklore.security.policy.ContentRestrictionSpecification;
+import org.booklore.service.browse.BookFilterSpecification;
 import org.booklore.service.restriction.ContentRestrictionService;
 import org.booklore.util.BookUtils;
 import org.hibernate.Hibernate;
@@ -52,9 +55,31 @@ public class BookQueryService {
     }
 
     public Page<Book> getAllBooksByLibraryIdsPaged(Collection<Long> libraryIds, Long userId, Pageable pageable) {
-        Page<BookEntity> page = bookRepository.findAll(visibleBooks(libraryIds, userId), pageable);
+        return findBooksPaged(visibleBooks(libraryIds, userId), pageable, userId);
+    }
+
+    private Specification<BookEntity> distinct(Specification<BookEntity> filter) {
+        return (root, query, cb) -> {
+            var predicate = filter.toPredicate(root, query, cb);
+            query.distinct(query.isDistinct() || hasCollectionJoin(root));
+            return predicate;
+        };
+    }
+
+    private static boolean hasCollectionJoin(From<?, ?> from) {
+        return from.getJoins().stream().anyMatch(join ->
+                join.getAttribute().isCollection() || hasCollectionJoin(join));
+    }
+
+    private interface BookIdProjection {
+        Long getId();
+    }
+
+    public Page<Book> findBooksPaged(Specification<BookEntity> spec, Pageable pageable, Long userId) {
+        Page<BookIdProjection> page = bookRepository.findBy(distinct(spec),
+                query -> query.as(BookIdProjection.class).page(pageable));
         Map<Long, BookEntity> booksById = bookRepository
-                .findAllWithMetadataByIds(page.getContent().stream().map(BookEntity::getId).collect(Collectors.toSet()))
+                .findAllWithMetadataByIds(page.getContent().stream().map(BookIdProjection::getId).collect(Collectors.toSet()))
                 .stream()
                 .collect(Collectors.toMap(BookEntity::getId, book -> book));
         List<Book> dtos = page.getContent().stream()
@@ -70,7 +95,7 @@ public class BookQueryService {
                 libraryIds == null || libraryIds.isEmpty()
                         ? cb.disjunction()
                         : root.get("library").get("id").in(libraryIds);
-        return AppBookSpecification.notDeleted()
+        return BookFilterSpecification.notDeleted()
                 .and(inLibraries)
                 .and(ContentRestrictionSpecification.from(restrictionRepository.findByUserId(userId)));
     }
@@ -170,9 +195,6 @@ public class BookQueryService {
 
         BookMetadata m = dto.getMetadata();
         if (m != null) {
-            // Compute allMetadataLocked before stripping lock flags
-            m.setAllMetadataLocked(computeAllMetadataLocked(m));
-
             // Strip lock flags
             m.setTitleLocked(null);
             m.setSubtitleLocked(null);
@@ -184,6 +206,7 @@ public class BookQueryService {
             m.setSeriesTotalLocked(null);
             m.setIsbn13Locked(null);
             m.setIsbn10Locked(null);
+            m.setOpenlibraryIdLocked(null);
             m.setAsinLocked(null);
             m.setGoodreadsIdLocked(null);
             m.setComicvineIdLocked(null);
@@ -208,6 +231,9 @@ public class BookQueryService {
             m.setAudibleIdLocked(null);
             m.setAudibleRatingLocked(null);
             m.setAudibleReviewCountLocked(null);
+            m.setApplebooksIdLocked(null);
+            m.setApplebooksRatingLocked(null);
+            m.setApplebooksReviewCountLocked(null);
             m.setExternalUrlLocked(null);
             m.setCoverLocked(null);
             m.setAudiobookCoverLocked(null);
@@ -222,6 +248,7 @@ public class BookQueryService {
             m.setContentRatingLocked(null);
 
             // Strip external IDs
+            m.setOpenlibraryId(null);
             m.setAsin(null);
             m.setGoodreadsId(null);
             m.setComicvineId(null);
@@ -232,9 +259,9 @@ public class BookQueryService {
             m.setRanobedbId(null);
             m.setAudibleId(null);
             m.setDoubanId(null);
+            m.setApplebooksId(null);
 
             // Strip unused detail fields
-            m.setSubtitle(null);
             m.setSeriesTotal(null);
             m.setAbridged(null);
             m.setExternalUrl(null);
@@ -251,6 +278,8 @@ public class BookQueryService {
             m.setAudibleRating(null);
             m.setAudibleReviewCount(null);
             m.setLubimyczytacRating(null);
+            m.setApplebooksRating(null);
+            m.setApplebooksReviewCount(null);
 
             // Strip empty metadata collections
             if (m.getMoods() != null && m.getMoods().isEmpty()) m.setMoods(null);
@@ -308,37 +337,5 @@ public class BookQueryService {
         // Strip empty book-level collections
         if (dto.getAlternativeFormats() != null && dto.getAlternativeFormats().isEmpty()) dto.setAlternativeFormats(null);
         if (dto.getSupplementaryFiles() != null && dto.getSupplementaryFiles().isEmpty()) dto.setSupplementaryFiles(null);
-    }
-
-    private boolean computeAllMetadataLocked(BookMetadata m) {
-        Boolean[] bookLocks = {
-                m.getTitleLocked(), m.getSubtitleLocked(), m.getPublisherLocked(),
-                m.getPublishedDateLocked(), m.getDescriptionLocked(), m.getSeriesNameLocked(),
-                m.getSeriesNumberLocked(), m.getSeriesTotalLocked(), m.getIsbn13Locked(),
-                m.getIsbn10Locked(), m.getAsinLocked(), m.getGoodreadsIdLocked(),
-                m.getComicvineIdLocked(), m.getHardcoverIdLocked(), m.getHardcoverBookIdLocked(),
-                m.getDoubanIdLocked(), m.getGoogleIdLocked(), m.getPageCountLocked(),
-                m.getLanguageLocked(), m.getAmazonRatingLocked(), m.getAmazonReviewCountLocked(),
-                m.getGoodreadsRatingLocked(), m.getGoodreadsReviewCountLocked(),
-                m.getHardcoverRatingLocked(), m.getHardcoverReviewCountLocked(),
-                m.getDoubanRatingLocked(), m.getDoubanReviewCountLocked(),
-                m.getLubimyczytacIdLocked(), m.getLubimyczytacRatingLocked(),
-                m.getRanobedbIdLocked(), m.getRanobedbRatingLocked(),
-                m.getAudibleIdLocked(), m.getAudibleRatingLocked(), m.getAudibleReviewCountLocked(),
-                m.getExternalUrlLocked(), m.getCoverLocked(), m.getAudiobookCoverLocked(),
-                m.getAuthorsLocked(), m.getCategoriesLocked(), m.getMoodsLocked(),
-                m.getTagsLocked(), m.getReviewsLocked(), m.getNarratorLocked(),
-                m.getAbridgedLocked(), m.getAgeRatingLocked(), m.getContentRatingLocked()
-        };
-
-        boolean hasAnyLock = false;
-        for (Boolean lock : bookLocks) {
-            if (Boolean.TRUE.equals(lock)) {
-                hasAnyLock = true;
-            } else {
-                return false;
-            }
-        }
-        return hasAnyLock;
     }
 }

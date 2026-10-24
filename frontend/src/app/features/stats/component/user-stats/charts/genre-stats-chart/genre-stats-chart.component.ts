@@ -4,7 +4,7 @@ import {BaseChartDirective} from 'ng2-charts';
 import {ChartConfiguration, ChartData} from 'chart.js';
 import {BehaviorSubject, EMPTY, Observable} from 'rxjs';
 import {catchError} from 'rxjs/operators';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {GenreStatsResponse, UserStatsService} from '../../../../../settings/user-management/user-stats.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {AsyncPipe} from '@angular/common';
@@ -20,15 +20,14 @@ type GenreChartData = ChartData<'bar', number[], string>;
   styleUrls: ['./genre-stats-chart.component.scss']
 })
 export class GenreStatsChartComponent implements OnInit {
+  private readonly userStatsService = inject(UserStatsService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
   @Input() maxGenres: number = 35;
 
   public readonly chartType = 'bar' as const;
   public readonly chartData$: Observable<GenreChartData>;
   public readonly chartOptions: ChartConfiguration['options'];
-
-  private readonly userStatsService = inject(UserStatsService);
-  private readonly t = inject(TranslocoService);
-  private readonly destroyRef = inject(DestroyRef);
   private readonly chartDataSubject: BehaviorSubject<GenreChartData>;
 
   constructor() {
@@ -70,8 +69,7 @@ export class GenreStatsChartComponent implements OnInit {
               return `${label}: ${timeStr}`;
             }
           }
-        },
-        datalabels: {display: false}
+        }
       },
       scales: {
         x: {

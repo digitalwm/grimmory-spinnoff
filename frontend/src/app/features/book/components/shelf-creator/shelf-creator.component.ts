@@ -1,17 +1,17 @@
 import {Component, inject} from '@angular/core';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
-import {MessageService} from 'primeng/api';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {MessageService} from '@openng/optimus-ui/api';
 import {ShelfService} from '../../service/shelf.service';
 import {IconPickerService} from '../../../../shared/service/icon-picker.service';
 import {IconSelection} from '../../../../shared/icons/icon-selection';
 import {Shelf} from '../../model/shelf.model';
 import {FormsModule} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {InputText} from 'primeng/inputtext';
-import {Tooltip} from 'primeng/tooltip';
+import {Button} from '@openng/optimus-ui/button';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {IconDisplayComponent} from '../../../../shared/components/icon-display/icon-display.component';
 import {UserService} from '../../../settings/user-management/user.service';
-import {Checkbox} from 'primeng/checkbox';
+import {Checkbox} from '@openng/optimus-ui/checkbox';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -30,11 +30,11 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
   styleUrl: './shelf-creator.component.scss',
 })
 export class ShelfCreatorComponent {
-  private shelfService = inject(ShelfService);
-  private dynamicDialogRef = inject(DynamicDialogRef);
-  private messageService = inject(MessageService);
-  private iconPickerService = inject(IconPickerService);
-  private userService = inject(UserService);
+  private readonly shelfService = inject(ShelfService);
+  private readonly dynamicDialogRef = inject(DynamicDialogRef);
+  private readonly messageService = inject(MessageService);
+  private readonly iconPickerService = inject(IconPickerService);
+  private readonly userService = inject(UserService);
   private readonly t = inject(TranslocoService);
 
   shelfName: string = '';

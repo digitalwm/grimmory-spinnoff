@@ -1,9 +1,9 @@
 import {Component, inject, OnInit, signal} from "@angular/core";
 import {FormsModule} from "@angular/forms";
 import {DecimalPipe} from "@angular/common";
-import {Checkbox} from "primeng/checkbox";
-import {Button} from "primeng/button";
-import {ConfirmationService, MessageService} from "primeng/api";
+import {Checkbox} from "@openng/optimus-ui/checkbox";
+import {Button} from "@openng/optimus-ui/button";
+import {ConfirmationService, MessageService} from "@openng/optimus-ui/api";
 import {TranslocoDirective} from "@jsverse/transloco";
 import {LocalSettingsService, LocalSettings} from "../../../../shared/service/local-settings.service";
 import {CacheStorageService} from "../../../../shared/service/cache-storage.service";
@@ -21,16 +21,16 @@ import {CacheStorageService} from "../../../../shared/service/cache-storage.serv
   styleUrl: "./local-settings.component.scss",
 })
 export class LocalSettingsComponent implements OnInit {
-  private localSettingsService = inject(LocalSettingsService);
-  private cacheStorageService = inject(CacheStorageService);
-  private messageService = inject(MessageService);
-  private confirmationService = inject(ConfirmationService);
+  private readonly localSettingsService = inject(LocalSettingsService);
+  private readonly cacheStorageService = inject(CacheStorageService);
+  private readonly messageService = inject(MessageService);
+  private readonly confirmationService = inject(ConfirmationService);
 
   protected settings: LocalSettings = this.localSettingsService.get();
 
-  protected isLoadingCacheStorageUsage = signal(false);
-  protected isClearingCacheStorage = signal(false);
-  protected cacheStorageUsageMb = signal(0);
+  protected readonly isLoadingCacheStorageUsage = signal(false);
+  protected readonly isClearingCacheStorage = signal(false);
+  protected readonly cacheStorageUsageMb = signal(0);
 
   async ngOnInit(): Promise<void> {
     await this.loadCacheStorageUsage();

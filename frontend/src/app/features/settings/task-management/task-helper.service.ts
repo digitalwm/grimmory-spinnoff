@@ -1,17 +1,15 @@
-import {inject, Injectable} from '@angular/core';
-import {MessageService} from 'primeng/api';
+import {inject, Service} from '@angular/core';
+import {MessageService} from '@openng/optimus-ui/api';
 import {MetadataRefreshRequest} from '../../metadata/model/request/metadata-refresh-request.model';
 import {catchError, map} from 'rxjs/operators';
 import {of} from 'rxjs';
 import {TaskCreateRequest, TaskService, TaskType} from './task.service';
 import {TranslocoService} from '@jsverse/transloco';
 
-@Injectable({
-  providedIn: 'root'
-})
+@Service()
 export class TaskHelperService {
-  private taskService = inject(TaskService);
-  private messageService = inject(MessageService);
+  private readonly taskService = inject(TaskService);
+  private readonly messageService = inject(MessageService);
   private readonly t = inject(TranslocoService);
 
   refreshMetadataTask(options: MetadataRefreshRequest) {

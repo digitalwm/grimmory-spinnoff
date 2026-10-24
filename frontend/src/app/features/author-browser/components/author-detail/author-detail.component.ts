@@ -1,19 +1,18 @@
 import { AfterViewChecked, Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { NgClass } from '@angular/common';
-import { Tab, TabList, TabPanel, TabPanels, Tabs } from 'primeng/tabs';
-import { ProgressSpinner } from 'primeng/progressspinner';
-import { Button } from 'primeng/button';
-import { Tag } from 'primeng/tag';
+import { Tab, TabList, TabPanel, TabPanels, Tabs } from '@openng/optimus-ui/tabs';
+import { ProgressSpinner } from '@openng/optimus-ui/progressspinner';
+import { Button } from '@openng/optimus-ui/button';
+import { Tag } from '@openng/optimus-ui/tag';
 import { TranslocoDirective, TranslocoService } from '@jsverse/transloco';
-import { MessageService } from 'primeng/api';
-import { Tooltip } from 'primeng/tooltip';
+import { MessageService } from '@openng/optimus-ui/api';
+import { Tooltip } from '@openng/optimus-ui/tooltip';
 import { AuthorService } from '../../service/author.service';
 import { AuthorDetails } from '../../model/author.model';
 import { BookService } from '../../../book/service/book.service';
-import { BookCardComponent } from '../../../book/components/book-browser/book-card/book-card.component';
-import { CoverScalePreferenceService } from '../../../book/components/book-browser/cover-scale-preference.service';
-import { BookCardOverlayPreferenceService } from '../../../book/components/book-browser/book-card-overlay-preference.service';
+import { LegacyBookCardComponent } from '../../../book/components/legacy-book-card/legacy-book-card.component';
+import { CoverScalePreferenceService } from '../../../../shared/service/cover-scale-preference.service';
+import { BookCardOverlayPreferenceService } from '../../../book/components/legacy-book-card/book-card-overlay-preference.service';
 import { UserService } from '../../../settings/user-management/user.service';
 import { AuthorMatchComponent } from '../author-match/author-match.component';
 import { AuthorEditorComponent } from '../author-editor/author-editor.component';
@@ -26,7 +25,6 @@ import { createVirtualGrid } from '../../../../shared/util/virtual-grid.util';
   templateUrl: './author-detail.component.html',
   styleUrls: ['./author-detail.component.scss'],
   imports: [
-    NgClass,
     Tabs,
     TabList,
     Tab,
@@ -37,7 +35,7 @@ import { createVirtualGrid } from '../../../../shared/util/virtual-grid.util';
     Tag,
     TranslocoDirective,
     Tooltip,
-    BookCardComponent,
+    LegacyBookCardComponent,
     AuthorMatchComponent,
     AuthorEditorComponent
   ]
@@ -46,30 +44,30 @@ export class AuthorDetailComponent implements OnInit, AfterViewChecked {
 
   private static readonly GRID_GAP = 21;
 
-  private route = inject(ActivatedRoute);
-  private router = inject(Router);
-  private authorService = inject(AuthorService);
-  private bookService = inject(BookService);
-  private messageService = inject(MessageService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly authorService = inject(AuthorService);
+  private readonly bookService = inject(BookService);
+  private readonly messageService = inject(MessageService);
   protected coverScalePreferenceService = inject(CoverScalePreferenceService);
   protected bookCardOverlayPreferenceService = inject(BookCardOverlayPreferenceService);
   protected userService = inject(UserService);
-  private pageTitle = inject(PageTitleService);
-  private t = inject(TranslocoService);
+  private readonly pageTitle = inject(PageTitleService);
+  private readonly t = inject(TranslocoService);
 
   readonly descriptionContentRef = viewChild<ElementRef<HTMLElement>>('descriptionContent');
   private readonly scrollElement = viewChild<ElementRef<HTMLElement>>('scrollElement');
 
-  loading = signal(true);
+  readonly loading = signal(true);
   tab = 'books';
   isExpanded = false;
   isOverflowing = false;
   hasPhoto = true;
   photoTimestamp = Date.now();
   quickMatching = false;
-  private authorState = signal<AuthorDetails | null>(null);
+  private readonly authorState = signal<AuthorDetails | null>(null);
   author = this.authorState.asReadonly();
-  authorBooks = computed(() => {
+  readonly authorBooks = computed(() => {
     const authorName = this.author()?.name?.toLowerCase();
     if (!authorName) {
       return [];

@@ -12,6 +12,7 @@ import {UserService, type User} from '../../../user-management/user.service';
 import {KoboService, type KoboSyncSettings} from './kobo.service';
 import {KoboSyncSettingsComponent} from './kobo-sync-settings-component';
 import {AppSettingsService} from '../../../../../shared/service/app-settings.service';
+import {ConfirmationService, MessageService} from '@openng/optimus-ui/api';
 
 const DEFAULT_KOBO_SYNC_SETTINGS: KoboSyncSettings = {
   token: '',
@@ -19,7 +20,6 @@ const DEFAULT_KOBO_SYNC_SETTINGS: KoboSyncSettings = {
   progressMarkAsReadingThreshold: 1,
   progressMarkAsFinishedThreshold: 99,
   autoAddToShelf: false,
-  twoWayProgressSync: false,
 };
 
 const DEFAULT_KOBO_ADMIN_SETTINGS: KoboSettings = {
@@ -157,7 +157,6 @@ describe('KoboSyncSettingsComponent', () => {
       progressMarkAsReadingThreshold: 1,
       progressMarkAsFinishedThreshold: 99,
       autoAddToShelf: false,
-      twoWayProgressSync: false,
     };
 
     setupKoboTest({
@@ -178,19 +177,18 @@ describe('KoboSyncSettingsComponent', () => {
     component.onAutoAddToggle(true);
 
     // Before the response arrives, the user edits a different control.
-    component.syncForm.controls.twoWayProgressSync.setValue(true);
-    component.syncForm.controls.twoWayProgressSync.markAsDirty();
+    component.syncForm.controls.progressMarkAsFinishedThreshold.setValue(4);
+    component.syncForm.controls.progressMarkAsFinishedThreshold.markAsDirty();
 
-    // Server confirms the autoAddToShelf change but still has the old twoWayProgressSync.
+    // Server confirms the autoAddToShelf change
     updateSettings$.next({
       ...initialSettings,
       autoAddToShelf: true,
-      twoWayProgressSync: false,
     });
 
     // The newer in-flight edit must not be reverted.
-    expect(component.syncForm.controls.twoWayProgressSync.value).toBe(true);
-    expect(component.syncForm.controls.twoWayProgressSync.dirty).toBe(true);
+    expect(component.syncForm.controls.progressMarkAsFinishedThreshold.value).toBe(4);
+    expect(component.syncForm.controls.progressMarkAsFinishedThreshold.dirty).toBe(true);
     expect(component.syncForm.controls.autoAddToShelf.value).toBe(true);
     expect(component.syncForm.controls.autoAddToShelf.pristine).toBe(true);
 
@@ -223,7 +221,6 @@ describe('KoboSyncSettingsComponent', () => {
       progressMarkAsReadingThreshold: 2,
       progressMarkAsFinishedThreshold: 95,
       autoAddToShelf: true,
-      twoWayProgressSync: true,
     });
     fixture.detectChanges();
     await fixture.whenStable();
@@ -239,9 +236,85 @@ describe('KoboSyncSettingsComponent', () => {
       progressMarkAsReadingThreshold: 2,
       progressMarkAsFinishedThreshold: 95,
       autoAddToShelf: true,
-      twoWayProgressSync: true,
     });
     expect(fixture.nativeElement.querySelector('input#koboToken')).not.toBeNull();
+
+    const apiPathInput = fixture.nativeElement.querySelector('input#koboApiPath') as HTMLInputElement | null;
+    expect(apiPathInput).not.toBeNull();
+    expect(apiPathInput?.value).toBe(`${window.location.origin}/api/kobo/token-123`);
+
+    fixture.destroy();
+  });
+
+  it('recomputes the API path when the token is regenerated', () => {
+    const userState = signal<User | null>(buildUser({canSyncKobo: true}));
+    const appSettingsState = signal<AppSettings | null>(null);
+    const initialSettings: KoboSyncSettings = {
+      ...DEFAULT_KOBO_SYNC_SETTINGS,
+      token: 'old-token',
+      syncEnabled: true,
+    };
+
+    TestBed.configureTestingModule({
+      imports: [KoboSyncSettingsComponent],
+      providers: [
+        {provide: UserService, useValue: {currentUser: () => userState()}},
+        {provide: AppSettingsService, useValue: {appSettings: () => appSettingsState()}},
+        {
+          provide: KoboService,
+          useValue: {
+            getUser: () => of(initialSettings),
+            updateSettings: (s: KoboSyncSettings) => of(s),
+            createOrUpdateToken: () => of({...initialSettings, token: 'new-token'}),
+          },
+        },
+        {provide: SettingsHelperService, useValue: {saveSetting: vi.fn()}},
+        {provide: ShelfService, useValue: {reloadShelves: vi.fn()}},
+        {provide: TranslocoService, useValue: {translate: vi.fn((key: string) => key)}},
+      ],
+    });
+    // Auto-accept the confirmation dialog and stub the toast so no template is needed.
+    // The rendered [value]="koboApiPath" binding is covered by the hydration test above;
+    // here we assert the recompute at the component-state level after regeneration.
+    TestBed.overrideComponent(KoboSyncSettingsComponent, {
+      set: {
+        template: '',
+        providers: [
+          {provide: ConfirmationService, useValue: {confirm: (o: {accept?: () => void}) => o.accept?.()}},
+          {provide: MessageService, useValue: {add: vi.fn()}},
+        ],
+      },
+    });
+
+    const fixture = TestBed.createComponent(KoboSyncSettingsComponent);
+    const component = fixture.componentInstance;
+
+    TestBed.flushEffects();
+    expect(component.koboApiPath).toBe(`${window.location.origin}/api/kobo/old-token`);
+
+    component.confirmRegenerateToken();
+
+    expect(component.syncForm.controls.token.value).toBe('new-token');
+    expect(component.koboApiPath).toBe(`${window.location.origin}/api/kobo/new-token`);
+
+    fixture.destroy();
+  });
+
+  it('builds the full Kobo API path from the token and is empty without one', () => {
+    const userState = signal<User | null>(buildUser({canSyncKobo: true}));
+    const appSettingsState = signal<AppSettings | null>(null);
+
+    setupKoboTest({userState, appSettingsState, getUser: () => of(DEFAULT_KOBO_SYNC_SETTINGS)});
+
+    const fixture = TestBed.createComponent(KoboSyncSettingsComponent);
+    const component = fixture.componentInstance;
+
+    TestBed.flushEffects();
+
+    expect(component.koboApiPath).toBe('');
+
+    component.syncForm.controls.token.setValue('token-xyz');
+    expect(component.koboApiPath).toBe(`${window.location.origin}/api/kobo/token-xyz`);
 
     fixture.destroy();
   });

@@ -1,9 +1,9 @@
 import {Component, DestroyRef, inject, OnInit, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {Button} from 'primeng/button';
-import {ProgressBar} from 'primeng/progressbar';
-import {MessageService} from 'primeng/api';
-import {Select} from 'primeng/select';
+import {Button} from '@openng/optimus-ui/button';
+import {ProgressBar} from '@openng/optimus-ui/progressbar';
+import {MessageService} from '@openng/optimus-ui/api';
+import {Select} from '@openng/optimus-ui/select';
 import {FormsModule} from '@angular/forms';
 import {
   LibraryRescanOptions,
@@ -21,16 +21,14 @@ import {
 import {MetadataRefreshRequest} from '../../metadata/model/request/metadata-refresh-request.model';
 import {finalize, forkJoin} from 'rxjs';
 import {ExternalDocLinkComponent} from '../../../shared/components/external-doc-link/external-doc-link.component';
-import {ToggleSwitch} from 'primeng/toggleswitch';
-import {Tooltip} from 'primeng/tooltip';
+import {ToggleSwitch} from '@openng/optimus-ui/toggleswitch';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
-import {NgClass} from '@angular/common';
 
 @Component({
   selector: 'app-task-management',
   standalone: true,
   imports: [
-    NgClass,
     Button,
     ProgressBar,
     Select,
@@ -46,9 +44,9 @@ import {NgClass} from '@angular/common';
 })
 export class TaskManagementComponent implements OnInit {
   // Services
-  private messageService = inject(MessageService);
-  private taskService = inject(TaskService);
-  private t = inject(TranslocoService);
+  private readonly messageService = inject(MessageService);
+  private readonly taskService = inject(TaskService);
+  private readonly t = inject(TranslocoService);
   private readonly destroyRef = inject(DestroyRef);
 
   // State

@@ -1,57 +1,90 @@
 import {AfterViewChecked, Component, computed, DestroyRef, ElementRef, inject, Input, OnInit, signal, ViewChild} from '@angular/core';
-import {Button} from 'primeng/button';
-import {DecimalPipe, NgClass} from '@angular/common';
+import {Button} from '@openng/optimus-ui/button';
+import {DecimalPipe} from '@angular/common';
 import {BookService} from '../../../../book/service/book.service';
 import {BookFileService} from '../../../../book/service/book-file.service';
-import {Rating, RatingRateEvent} from 'primeng/rating';
+import {Rating, RatingRateEvent} from '@openng/optimus-ui/rating';
 import {FormsModule} from '@angular/forms';
 import {Book, BookFile, BookMetadata, BookRecommendation, BookType, ComicMetadata, FileInfo, ReadStatus} from '../../../../book/model/book.model';
 import {UrlHelperService} from '../../../../../shared/service/url-helper.service';
-import {CoverPlaceholderComponent} from '../../../../../shared/components/cover-generator/cover-generator.component';
+import {CoverComponent} from '../../../../../shared/components/cover/cover.component';
 import {UserService} from '../../../../settings/user-management/user.service';
-import {SplitButton} from 'primeng/splitbutton';
-import {ConfirmationService, MenuItem, MessageService} from 'primeng/api';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
+import {SplitButton} from '@openng/optimus-ui/splitbutton';
+import {ConfirmationService, MenuItem, MessageService} from '@openng/optimus-ui/api';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {EmailService} from '../../../../settings/email-v2/email.service';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
-import {ProgressBar} from 'primeng/progressbar';
+import {ProgressBar} from '@openng/optimus-ui/progressbar';
 import {MetadataRefreshType} from '../../../model/request/metadata-refresh-type.enum';
 import {Router} from '@angular/router';
 import {catchError, map, switchMap, take} from 'rxjs/operators';
 import {of} from 'rxjs';
-import {Menu} from 'primeng/menu';
+import {Menu} from '@openng/optimus-ui/menu';
 import {ResetProgressType, ResetProgressTypes} from '../../../../../shared/constants/reset-progress-type';
-import {DatePicker} from 'primeng/datepicker';
-import {ProgressSpinner} from 'primeng/progressspinner';
-import {TieredMenu} from 'primeng/tieredmenu';
-import {Image} from 'primeng/image';
-import {BookDialogHelperService} from '../../../../book/components/book-browser/book-dialog-helper.service';
+import {DatePicker} from '@openng/optimus-ui/datepicker';
+import {ProgressSpinner} from '@openng/optimus-ui/progressspinner';
+import {TieredMenu} from '@openng/optimus-ui/tieredmenu';
+import {BookDialogHelperService} from '../../../../book/service/book-dialog-helper.service';
 import {LibraryService} from '../../../../book/service/library.service';
 import {TagColor, TagComponent} from '../../../../../shared/components/tag/tag.component';
 import {TaskHelperService} from '../../../../settings/task-management/task-helper.service';
-import {AGE_RATING_OPTIONS, CONTENT_RATING_LABELS, fileSizeRanges, matchScoreRanges, pageCountRanges} from '../../../../book/components/book-browser/book-filter/book-filter.config';
+import {formatRangeToken} from '../../../../../shared/browse/facet-ranges';
+import {
+  AGE_RATING_OPTIONS,
+  bookMatchScoreRangeToken,
+  CONTENT_RATING_LABELS,
+  PAGE_COUNT_RANGES,
+} from '../../../../book/model/book-value-labels';
 import {BookNavigationService} from '../../../../book/service/book-navigation.service';
 import {BookMetadataHostService} from '../../../../../shared/service/book-metadata-host.service';
 import {AppSettingsService} from '../../../../../shared/service/app-settings.service';
+import {LanguageResolverService} from '../../../../../shared/service/language-resolver.service';
 import {DeleteBookFileEvent, DeleteSupplementaryFileEvent, DetachBookFileEvent, DownloadAdditionalFileEvent, DownloadAllFilesEvent, DownloadEvent, MetadataTabsComponent, ReadEvent} from './metadata-tabs/metadata-tabs.component';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 import {AuthorService} from '../../../../author-browser/service/author.service';
-import {Dialog} from 'primeng/dialog';
-import {Checkbox} from 'primeng/checkbox';
+import {Dialog} from '@openng/optimus-ui/dialog';
+import {Checkbox} from '@openng/optimus-ui/checkbox';
 import DOMPurify from 'dompurify';
+import {MetadataCatalogService} from '../../../../../shared/metadata/metadata-catalog.service';
+import type {MetadataProviderId} from '../../../../../shared/metadata/metadata-providers';
 
+interface ProviderBadge {
+  id: MetadataProviderId;
+  labelKey: string;
+  rating: number | null;
+  tooltip: string | undefined;
+}
 
 @Component({
   selector: 'app-metadata-viewer',
   standalone: true,
   templateUrl: './metadata-viewer.component.html',
   styleUrl: './metadata-viewer.component.scss',
-  imports: [Button, Rating, FormsModule, SplitButton, NgClass, Tooltip, DecimalPipe, ProgressBar, Menu, DatePicker, ProgressSpinner, TieredMenu, Image, TagComponent, MetadataTabsComponent, TranslocoDirective, TranslocoPipe, Dialog, Checkbox, CoverPlaceholderComponent]
+  imports: [Button, Rating, FormsModule, SplitButton, Tooltip, DecimalPipe, ProgressBar, Menu, DatePicker, ProgressSpinner, TieredMenu, TagComponent, MetadataTabsComponent, TranslocoDirective, TranslocoPipe, Dialog, Checkbox, CoverComponent]
 })
 export class MetadataViewerComponent implements OnInit, AfterViewChecked {
-  private bookService = inject(BookService);
-  private currentBook = signal<Book | null>(null);
+  private readonly bookService = inject(BookService);
+  private readonly t = inject(TranslocoService);
+  private readonly libraryService = inject(LibraryService);
+  private readonly bookDialogHelperService = inject(BookDialogHelperService)
+  private readonly emailService = inject(EmailService);
+  private readonly messageService = inject(MessageService);
+  private readonly bookFileService = inject(BookFileService);
+  private readonly taskHelperService = inject(TaskHelperService);
+  private readonly authorService = inject(AuthorService);
+  protected urlHelper = inject(UrlHelperService);
+  protected userService = inject(UserService);
+  protected languageResolver = inject(LanguageResolverService);
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly confirmationService = inject(ConfirmationService);
+  private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly dialogRef = inject(DynamicDialogRef, { optional: true });
+  private readonly catalog = inject(MetadataCatalogService);
+  private readonly bookNavigationService = inject(BookNavigationService);
+  private readonly metadataHostService = inject(BookMetadataHostService);
+  private readonly currentBook = signal<Book | null>(null);
   private readonly seriesLookupBookId = computed(() => {
     const metadata = this.currentBook()?.metadata;
     return metadata?.seriesName ? metadata.bookId : null;
@@ -98,25 +131,36 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   set recommendedBooks(value: BookRecommendation[]) {
     this.originalRecommendedBooks.set(value);
   }
+  private readonly activeLang = toSignal(this.t.langChanges$, {initialValue: this.t.getActiveLang()});
+  private readonly userState = this.userService.currentUser;
+  private readonly appSettings = this.appSettingsService.appSettings;
 
-  private readonly t = inject(TranslocoService);
-  private libraryService = inject(LibraryService);
-  private bookDialogHelperService = inject(BookDialogHelperService)
-  private emailService = inject(EmailService);
-  private messageService = inject(MessageService);
-  private bookFileService = inject(BookFileService);
-  private taskHelperService = inject(TaskHelperService);
-  private authorService = inject(AuthorService);
-  protected urlHelper = inject(UrlHelperService);
-  protected userService = inject(UserService);
-  private appSettingsService = inject(AppSettingsService);
-  private confirmationService = inject(ConfirmationService);
+  readonly providerBadges = computed((): ProviderBadge[] => {
+    const metadata = this.currentBook()?.metadata;
+    if (!metadata) {
+      return [];
+    }
 
-  private router = inject(Router);
-  private destroyRef = inject(DestroyRef);
-  private dialogRef = inject(DynamicDialogRef, { optional: true });
-  private userState = this.userService.currentUser;
-  private appSettings = this.appSettingsService.appSettings;
+    return this.catalog.providers().map(provider => {
+      const book = provider.book;
+      const rating = (book?.rating ? metadata[book.rating] : null) ?? null;
+      const reviewCount = (book?.reviewCount ? metadata[book.reviewCount] : null) ?? null;
+
+      return {
+        id: provider.id,
+        labelKey: provider.labelKey,
+        rating,
+        tooltip: this.ratingTooltip(rating, reviewCount),
+      };
+    }).filter(provider => provider.rating !== null);
+  });
+
+  private ratingTooltip(rating: number | null, reviewCount: number | null): string | undefined {
+    if (rating === null) return undefined;
+    return reviewCount === null
+      ? this.t.translate('metadata.viewer.ratingTooltipNoReviews', {rating}, this.activeLang())
+      : this.t.translate('metadata.viewer.ratingTooltip', {rating, reviews: reviewCount.toLocaleString()}, this.activeLang());
+  }
 
   private navigateAfterDialogClose(navigate: () => void): void {
     if (this.metadataCenterViewMode !== 'dialog') {
@@ -429,7 +473,6 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   get bookInSeries(): Book[] {
     return this.bookInSeriesSignal();
   }
-  @ViewChild(Image) private coverImage?: Image;
   @ViewChild('descriptionContent') descriptionContentRef?: ElementRef<HTMLElement>;
   isExpanded = false;
   isOverflowing = false;
@@ -457,10 +500,6 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
     {value: ReadStatus.WONT_READ, labelKey: 'metadata.viewer.readStatusWontRead'},
     {value: ReadStatus.UNSET, labelKey: 'metadata.viewer.readStatusUnset'},
   ];
-
-  private bookNavigationService = inject(BookNavigationService);
-  private metadataHostService = inject(BookMetadataHostService);
-  amazonDomain = 'com';
   readonly navigationState = this.bookNavigationService.navigationState;
   readonly canNavigatePrevious = this.bookNavigationService.canNavigatePrevious;
   readonly canNavigateNext = this.bookNavigationService.canNavigateNext;
@@ -472,20 +511,9 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   });
 
   ngOnInit(): void {
-    this.destroyRef.onDestroy(() => this.coverImage?.closePreview());
-
-    const onPopState = () => this.coverImage?.closePreview();
-    window.addEventListener('popstate', onPopState);
-    this.destroyRef.onDestroy(() => window.removeEventListener('popstate', onPopState));
-
     const user = this.userService.currentUser();
     if (user) {
       this.metadataCenterViewMode = user.userSettings.metadataCenterViewMode ?? 'route';
-    }
-
-    const settings = this.appSettingsService.appSettings();
-    if (settings) {
-      this.amazonDomain = settings.metadataProviderSettings?.amazon?.domain ?? 'com';
     }
   }
 
@@ -812,7 +840,7 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   }
 
   goToCategory(category: string): void {
-    this.handleMetadataClick('category', category);
+    this.handleMetadataClick('genre', category);
   }
 
   goToMood(mood: string): void {
@@ -846,7 +874,7 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   goToPublishedYear(publishedDate: string): void {
     const year = this.extractYear(publishedDate);
     if (year) {
-      this.handleMetadataClick('publishedDate', year);
+      this.handleMetadataClick('published_year', year);
     }
   }
 
@@ -864,42 +892,35 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
       if (["MP3", "M4A", "M4B", "OPUS"].includes(filterValue)) {
         filterValue = 'AUDIOBOOK';
       }
-      this.handleMetadataClick('bookType', filterValue);
+      this.handleMetadataClick('file_type', filterValue);
     }
   }
 
   goToReadStatus(status: ReadStatus): void {
-    this.handleMetadataClick('readStatus', status);
+    this.handleMetadataClick('read_status', status);
   }
 
   goToPageCountRange(pageCount: number): void {
-    const range = pageCountRanges.find(r => pageCount >= r.min && pageCount < r.max);
-    if (range) {
-      this.handleMetadataClick('pageCount', range.id.toString());
-    }
-  }
-
-  goToFileSizeRange(fileSizeKb: number): void {
-    const range = fileSizeRanges.find(r => fileSizeKb >= r.min && fileSizeKb < r.max);
-    if (range) {
-      this.handleMetadataClick('fileSize', range.id.toString());
+    const range = PAGE_COUNT_RANGES.find(r => pageCount >= r.min && pageCount < r.max);
+    const token = range && formatRangeToken({min: range.min, max: Number.isFinite(range.max) ? range.max : null});
+    if (token) {
+      this.handleMetadataClick('page_count', token);
     }
   }
 
   goToMatchScoreRange(score: number): void {
-    const normalizedScore = score > 1 ? score / 100 : score;
-    const range = matchScoreRanges.find(r => normalizedScore >= r.min && normalizedScore < r.max);
-    if (range) {
-      this.handleMetadataClick('matchScore', range.id.toString());
+    const token = bookMatchScoreRangeToken(score);
+    if (token) {
+      this.handleMetadataClick('match_score', token);
     }
   }
 
   goToAgeRating(ageRating: number): void {
-    this.handleMetadataClick('ageRating', ageRating.toString());
+    this.handleMetadataClick('age_rating', ageRating.toString());
   }
 
   goToContentRating(contentRating: string): void {
-    this.handleMetadataClick('contentRating', contentRating);
+    this.handleMetadataClick('content_rating', contentRating);
   }
 
   getAgeRatingLabel(ageRating: number | null | undefined): string {
@@ -922,11 +943,7 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   private navigateToFilteredBooks(filterKey: string, filterValue: string): void {
     this.router.navigate(['/all-books'], {
       queryParams: {
-        view: 'grid',
-        sort: 'title',
-        direction: 'asc',
-        sidebar: true,
-        filter: `${filterKey}:${encodeURIComponent(filterValue)}`
+        facet: `${filterKey}:${filterValue}`,
       }
     });
   }
@@ -1157,40 +1174,6 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
     return p != null ? Math.round(p * 10) / 10 : null;
   }
 
-  getRatingTooltip(book: Book, source: 'amazon' | 'goodreads' | 'hardcover' | 'lubimyczytac' | 'ranobedb' | 'audible'): string {
-    const meta = book?.metadata;
-    if (!meta) return '';
-
-    switch (source) {
-      case 'amazon':
-        return meta.amazonRating != null
-          ? `★ ${meta.amazonRating} | ${meta.amazonReviewCount?.toLocaleString() ?? '0'} reviews`
-          : '';
-      case 'goodreads':
-        return meta.goodreadsRating != null
-          ? `★ ${meta.goodreadsRating} | ${meta.goodreadsReviewCount?.toLocaleString() ?? '0'} reviews`
-          : '';
-      case 'hardcover':
-        return meta.hardcoverRating != null
-          ? `★ ${meta.hardcoverRating} | ${meta.hardcoverReviewCount?.toLocaleString() ?? '0'} reviews`
-          : '';
-      case 'lubimyczytac':
-        return meta.lubimyczytacRating != null
-          ? `★ ${meta.lubimyczytacRating}`
-          : '';
-      case 'ranobedb':
-        return meta.ranobedbRating != null
-          ? `★ ${meta.ranobedbRating}`
-          : '';
-      case 'audible':
-        return meta.audibleRating != null
-          ? `★ ${meta.audibleRating} | ${meta.audibleReviewCount?.toLocaleString() ?? '0'} reviews`
-          : '';
-      default:
-        return '';
-    }
-  }
-
   getRatingPercent(rating: number | null | undefined): number {
     if (rating == null) return 0;
     return Math.round((rating / 5) * 100);
@@ -1363,19 +1346,19 @@ export class MetadataViewerComponent implements OnInit, AfterViewChecked {
   }
 
   goToCharacter(character: string): void {
-    this.handleMetadataClick('comicCharacter', character);
+    this.handleMetadataClick('comic_character', character);
   }
 
   goToTeam(team: string): void {
-    this.handleMetadataClick('comicTeam', team);
+    this.handleMetadataClick('comic_team', team);
   }
 
   goToLocation(location: string): void {
-    this.handleMetadataClick('comicLocation', location);
+    this.handleMetadataClick('comic_location', location);
   }
 
   goToCreator(name: string, role: string): void {
-    this.handleMetadataClick('comicCreator', `${name}:${role}`);
+    this.handleMetadataClick('comic_creator', `${name}:${role}`);
   }
 
   // Audiobook metadata helpers

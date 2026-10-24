@@ -1,5 +1,5 @@
 import {AfterViewInit, Component, effect, ElementRef, inject, ViewChild} from '@angular/core';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {BookService} from '../../../../../book/service/book.service';
 import {Book, ReadStatus} from '../../../../../book/model/book.model';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
@@ -30,11 +30,10 @@ interface SankeyLink {
   styleUrls: ['./book-flow-chart.component.scss']
 })
 export class BookFlowChartComponent implements AfterViewInit {
-  @ViewChild('flowCanvas', {static: false}) canvasRef!: ElementRef<HTMLCanvasElement>;
-
   private readonly bookService = inject(BookService);
   private readonly t = inject(TranslocoService);
   private readonly chartTheme = inject(StatsChartThemeService);
+  @ViewChild('flowCanvas', {static: false}) canvasRef!: ElementRef<HTMLCanvasElement>;
   private readonly syncChartEffect = effect(() => {
     this.chartTheme.themeRevision();
 

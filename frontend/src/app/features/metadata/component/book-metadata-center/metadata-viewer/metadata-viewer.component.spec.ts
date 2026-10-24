@@ -1,8 +1,10 @@
+import {MetadataCatalogService} from '../../../../../shared/metadata/metadata-catalog.service';
+import {METADATA_PROVIDER_LIST} from '../../../../../shared/metadata/metadata-providers';
 import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
-import {of, throwError} from 'rxjs';
+import {BehaviorSubject, of, throwError} from 'rxjs';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {ConfirmationService, MessageService, MenuItem} from 'primeng/api';
+import {ConfirmationService, MessageService, MenuItem} from '@openng/optimus-ui/api';
 import {TranslocoService} from '@jsverse/transloco';
 
 import {Book, BookFile, BookMetadata, BookRecommendation, ReadStatus} from '../../../../book/model/book.model';
@@ -13,7 +15,7 @@ import {AppSettingsService} from '../../../../../shared/service/app-settings.ser
 import {UrlHelperService} from '../../../../../shared/service/url-helper.service';
 import {UserService} from '../../../../settings/user-management/user.service';
 import {EmailService} from '../../../../settings/email-v2/email.service';
-import {BookDialogHelperService} from '../../../../book/components/book-browser/book-dialog-helper.service';
+import {BookDialogHelperService} from '../../../../book/service/book-dialog-helper.service';
 import {LibraryService} from '../../../../book/service/library.service';
 import {TaskHelperService} from '../../../../settings/task-management/task-helper.service';
 import {AuthorService} from '../../../../author-browser/service/author.service';
@@ -42,6 +44,8 @@ interface ConfirmationLike {
 }
 
 describe('MetadataViewerComponent', () => {
+  let langChanges: BehaviorSubject<string>;
+  const providers = signal(METADATA_PROVIDER_LIST);
   const currentUser = signal<CurrentUser | null>(null);
   const appSettings = signal<AppSettings | null>(null);
   const navigationState = signal(false);
@@ -90,10 +94,11 @@ describe('MetadataViewerComponent', () => {
   });
   const messageAdd = vi.fn();
   const translate = vi.fn((key: string, params?: Record<string, unknown>) => {
+    const translatedKey = langChanges.value === 'en' ? key : `${langChanges.value}:${key}`;
     if (!params) {
-      return key;
+      return translatedKey;
     }
-    return `${key}:${Object.entries(params).map(([paramKey, value]) => `${paramKey}=${value}`).join(',')}`;
+    return `${translatedKey}:${Object.entries(params).map(([paramKey, value]) => `${paramKey}=${String(value)}`).join(',')}`;
   });
   const getCoverUrl = vi.fn((bookId: number, updatedOn?: string) => `cover:${bookId}:${updatedOn ?? 'none'}`);
   const getAudiobookCoverUrl = vi.fn((bookId: number, updatedOn?: string) => `audio:${bookId}:${updatedOn ?? 'none'}`);
@@ -150,6 +155,8 @@ describe('MetadataViewerComponent', () => {
   }
 
   beforeEach(() => {
+    langChanges = new BehaviorSubject('en');
+    providers.set(METADATA_PROVIDER_LIST);
     currentUser.set(null);
     appSettings.set(null);
     navigationState.set(false);
@@ -202,7 +209,8 @@ describe('MetadataViewerComponent', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        {provide: TranslocoService, useValue: {translate}},
+        {provide: MetadataCatalogService, useValue: {providers: providers.asReadonly()}},
+        {provide: TranslocoService, useValue: {translate, getActiveLang: () => langChanges.value, langChanges$: langChanges}},
         {provide: LibraryService, useValue: {findLibraryById}},
         {
           provide: BookDialogHelperService,
@@ -482,7 +490,6 @@ describe('MetadataViewerComponent', () => {
     expect(component.getStarColorScaled(null)).toBe('rgb(203, 213, 225)');
     expect(component.getStarColorScaled(5)).toBe('rgb(34, 197, 94)');
     expect(component.getRatingPercent(4.5)).toBe(90);
-    expect(component.getRatingTooltip(createBook({metadata: createMetadata({amazonRating: 4.2, amazonReviewCount: 1234})}), 'amazon')).toBe('★ 4.2 | 1,234 reviews');
     expect(component.getStatusLabel(ReadStatus.READING)).toBe('metadata.viewer.readStatusReading'.toUpperCase());
     expect(component.getStatusLabel('missing')).toBe('UNSET');
     expect(component.getBookCoverUrl(createBook())).toBe('cover:21:2026-03-26');
@@ -498,4 +505,5 @@ describe('MetadataViewerComponent', () => {
     expect(component.getChannelLabel(2)).toBe('metadata.viewer.channelStereo');
     expect(component.getChannelLabel(6)).toBe('metadata.viewer.channelMultiple:count=6');
   });
+
 });

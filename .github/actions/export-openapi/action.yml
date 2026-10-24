@@ -19,7 +19,7 @@ runs:
         ref: ${{ inputs.checkout_ref }}
 
     - name: Install just
-      uses: taiki-e/install-action@5f57d6cb7cd20b14a8a27f522884c4bc8a187458 # v2.75.19
+      uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
       with:
         tool: just
 
@@ -28,6 +28,12 @@ runs:
       with:
         java-version: '25'
         distribution: 'temurin'
+        cache: gradle
+        cache-dependency-path: |
+          **/*.gradle*
+          **/gradle.lockfile
+          **/settings.gradle*
+          **/gradle/wrapper/gradle-wrapper.properties
 
     - name: Export OpenAPI JSON
       shell: bash

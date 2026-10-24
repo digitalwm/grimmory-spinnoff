@@ -3,7 +3,7 @@ import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {of, throwError} from 'rxjs';
 
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 
 import {getTranslocoModule} from '../../../../core/testing/transloco-testing';
 import {type AppSettings, type MetadataMatchWeights} from '../../../../shared/model/app-settings.model';
@@ -56,7 +56,7 @@ describe('MetadataMatchWeightsComponent', () => {
 
     expect(component.form.get('title')?.value).toBe(10);
     expect(component.form.get('authors')?.value).toBe(9);
-    expect(component.orderedKeys[0]).toBe('title');
+    expect(component.orderedKeys()[0]).toBe('title');
   });
 
   it('hydrates the reactive form when weights resolve after initial render', () => {

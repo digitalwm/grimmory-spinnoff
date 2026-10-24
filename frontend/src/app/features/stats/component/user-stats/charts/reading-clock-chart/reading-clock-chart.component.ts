@@ -1,6 +1,6 @@
 import {Component, inject, OnDestroy, OnInit} from '@angular/core';
 import {BaseChartDirective} from 'ng2-charts';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {BehaviorSubject, EMPTY, Observable, Subject} from 'rxjs';
 import {catchError, takeUntil} from 'rxjs/operators';
 import {ChartConfiguration, ChartData} from 'chart.js';
@@ -63,8 +63,7 @@ export class ReadingClockChartComponent implements OnInit, OnDestroy {
             return this.t.translate('statsUser.readingClock.tooltipReading', {time: `${Math.round(minutes)}m`});
           }
         }
-      },
-      datalabels: {display: false}
+      }
     },
     scales: {
       r: {
@@ -110,7 +109,7 @@ export class ReadingClockChartComponent implements OnInit, OnDestroy {
     this.hasData = true;
 
     // Build 24-hour array
-    const hourMinutes = new Array(24).fill(0);
+    const hourMinutes = Array.from({length: 24}, () => 0);
     let totalSeconds = 0;
     let peakIdx = 0;
     let peakVal = 0;

@@ -31,7 +31,6 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@EnabledIf("org.booklore.service.ArchiveService#isAvailable")
 class CbxComicInfoComplianceTest {
 
     private static final Pattern EMPTY_LINES_PATTERN = Pattern.compile("(?s).*\\n\\s*\\n\\s*<.*");
@@ -98,7 +97,7 @@ class CbxComicInfoComplianceTest {
         metadata.setIsbn10("160690373X");
         metadata.setHardcoverRating(4.0d);
 
-        writer.saveMetadataToFile(cbz, metadata, null, new MetadataClearFlags());
+        writer.saveMetadataToFile(cbz, metadata, new MetadataClearFlags());
 
         String xmlContent = readComicInfoFromCbz(cbz);
         System.out.println("Generated XML:\n" + xmlContent);

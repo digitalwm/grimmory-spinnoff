@@ -4,7 +4,7 @@ import {TranslocoDirective} from '@jsverse/transloco';
 import {clampStripMaxWidthPercent} from '../../../readers/cbx-reader/core/cbx-reader-storage';
 import {CbxBackgroundColor, CbxFitMode, CbxPageSpread, CbxPageViewMode, CbxScrollMode, UserSettings} from '../../user-management/user.service';
 import {ReaderPreferencesService} from '../reader-preferences.service';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 
 @Component({
   selector: 'app-cbx-reader-preferences-component',
@@ -17,10 +17,9 @@ import {Tooltip} from 'primeng/tooltip';
   styleUrl: './cbx-reader-preferences-component.scss'
 })
 export class CbxReaderPreferencesComponent {
+  private readonly readerPreferencesService = inject(ReaderPreferencesService);
 
   @Input() userSettings!: UserSettings;
-
-  private readonly readerPreferencesService = inject(ReaderPreferencesService);
 
   private static readonly SETTING_ROOT = 'cbxReaderSetting';
   private static readonly PROP_PAGE_SPREAD = 'pageSpread';

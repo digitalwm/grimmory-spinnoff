@@ -1,6 +1,6 @@
 import {Component, inject, Input, OnDestroy, OnInit} from '@angular/core';
 import {BaseChartDirective} from 'ng2-charts';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {EMPTY, Subject} from 'rxjs';
 import {catchError, takeUntil} from 'rxjs/operators';
 import {ChartConfiguration, ChartData} from 'chart.js';
@@ -20,10 +20,9 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   styleUrls: ['./session-archetypes-chart.component.scss']
 })
 export class SessionArchetypesChartComponent implements OnInit, OnDestroy {
-  @Input() initialYear = new Date().getFullYear();
-
   private readonly userStatsService = inject(UserStatsService);
   private readonly t = inject(TranslocoService);
+  @Input() initialYear = new Date().getFullYear();
   private readonly destroy$ = new Subject<void>();
 
   public readonly chartType = 'scatter' as const;
@@ -55,8 +54,7 @@ export class SessionArchetypesChartComponent implements OnInit, OnDestroy {
             return `${ctx.dataset.label}: ${h}:${String(m).padStart(2, '0')} - ${duration} min`;
           }
         }
-      },
-      datalabels: {display: false}
+      }
     },
     scales: {
       x: {
@@ -123,7 +121,7 @@ export class SessionArchetypesChartComponent implements OnInit, OnDestroy {
     const quadrants = {morning: 0, afternoon: 0, evening: 0, night: 0};
 
     for (const s of filtered) {
-      const points = byDay.get(s.dayOfWeek) || [];
+      const points = byDay.get(s.dayOfWeek) ?? [];
       points.push({x: s.hourOfDay, y: s.durationMinutes});
       byDay.set(s.dayOfWeek, points);
 
@@ -140,7 +138,7 @@ export class SessionArchetypesChartComponent implements OnInit, OnDestroy {
       const dayNum = i + 1;
       return {
         label: name,
-        data: byDay.get(dayNum) || [],
+        data: byDay.get(dayNum) ?? [],
         backgroundColor: DAY_COLORS[i] + 'AA',
         borderColor: DAY_COLORS[i],
         borderWidth: 1,

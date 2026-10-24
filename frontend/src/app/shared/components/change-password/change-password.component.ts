@@ -1,10 +1,10 @@
 import {Component, inject} from '@angular/core';
-import {Button} from 'primeng/button';
+import {Button} from '@openng/optimus-ui/button';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {Message} from 'primeng/message';
+import {Message} from '@openng/optimus-ui/message';
 
-import {Password} from 'primeng/password';
-import {MessageService} from 'primeng/api';
+import {Password} from '@openng/optimus-ui/password';
+import {MessageService} from '@openng/optimus-ui/api';
 import {UserService} from '../../../features/settings/user-management/user.service';
 import {AuthService} from '../../service/auth.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
@@ -24,16 +24,15 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
   styleUrl: './change-password.component.scss'
 })
 export class ChangePasswordComponent {
+  protected userService = inject(UserService);
+  protected authService = inject(AuthService);
+  protected messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
   currentPassword: string = '';
   newPassword: string = '';
   confirmNewPassword: string = '';
   errorMessage: string | null = null;
   successMessage: string | null = null;
-
-  protected userService = inject(UserService);
-  protected authService = inject(AuthService);
-  protected messageService = inject(MessageService);
-  private readonly t = inject(TranslocoService);
 
   get passwordsMatch(): boolean {
     return this.newPassword === this.confirmNewPassword;

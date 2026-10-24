@@ -5,7 +5,7 @@ import {MetadataRefreshOptions} from '../../metadata/model/request/metadata-refr
 import {AppSettingsService} from '../../../shared/service/app-settings.service';
 import {SettingsHelperService} from '../../../shared/service/settings-helper.service';
 import {AppSettingKey, AppSettings} from '../../../shared/model/app-settings.model';
-import {ToggleSwitch} from 'primeng/toggleswitch';
+import {ToggleSwitch} from '@openng/optimus-ui/toggleswitch';
 import {MetadataMatchWeightsComponent} from '../global-preferences/metadata-match-weights/metadata-match-weights-component';
 import {MetadataPersistenceSettingsComponent} from './metadata-persistence-settings/metadata-persistence-settings-component';
 import {PublicReviewsSettingsComponent} from './public-reviews-settings/public-reviews-settings-component';
@@ -29,12 +29,11 @@ import {TranslocoDirective} from '@jsverse/transloco';
   styleUrl: './metadata-settings-component.scss'
 })
 export class MetadataSettingsComponent {
-
-  currentMetadataOptions: MetadataRefreshOptions | undefined;
-
   private readonly fb = inject(FormBuilder);
   private readonly appSettingsService = inject(AppSettingsService);
   private readonly settingsHelper = inject(SettingsHelperService);
+
+  currentMetadataOptions: MetadataRefreshOptions | undefined;
 
   readonly form = this.fb.nonNullable.group({
     metadataDownloadOnBookdrop: [true],

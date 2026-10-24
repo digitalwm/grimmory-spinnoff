@@ -15,12 +15,12 @@ production image.
 
 ## Stack
 
-- Angular 21
+- Angular 22
 - TypeScript
-- PrimeNG + PrimeIcons
+- Optimus UI + OpenNG Icons
 - Transloco for i18n
 - Vitest for unit tests
-- Angular ESLint
+- Oxlint + Angular ESLint
 - SCSS
 
 ## Preferred Command Surface
@@ -37,6 +37,7 @@ just coverage        # Run tests with coverage output
 just check           # Run the standard local verification pass
 just ci-check        # Run the stricter CI-style verification pass
 just lint            # Run the frontend linter
+just lint-prune      # Remove fixed findings from the lint baselines
 just build           # Build the production bundle
 ```
 
@@ -77,6 +78,9 @@ just check
 just lint
 ```
 
+Existing lint findings are recorded in `oxlint-suppressions.json` and `eslint-suppressions.json`. After
+fixing recorded findings, run `just lint-prune` and commit the updated baseline files.
+
 The production output is written to `dist/grimmory/`. The backend packaging flow consumes that bundle
 when building the all-in-one production image.
 
@@ -88,7 +92,7 @@ flow from a clean install.
 - Follow the Angular style guide.
 - All components are standalone. Do not add NgModules.
 - Use `inject()` for dependency injection instead of constructor injection.
-- Prefer PrimeNG components and existing project styling patterns over custom one-off UI primitives.
+- Prefer Optimus UI components and existing project styling patterns over custom one-off UI primitives.
 - Use SCSS for styling and keep the visual language consistent with the existing application.
 - Use Transloco for user-facing strings. New strings belong under `src/i18n/`.
 - Keep UI changes responsive for desktop and mobile layouts.

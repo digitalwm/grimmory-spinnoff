@@ -1,7 +1,7 @@
 import {Component, computed, inject} from '@angular/core';
 import {BaseChartDirective} from 'ng2-charts';
 import {ChartConfiguration, ChartData, Chart} from 'chart.js';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {BookService} from '../../../../../book/service/book.service';
 import {Book, ReadStatus} from '../../../../../book/model/book.model';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
@@ -110,7 +110,7 @@ export class ReadStatusChartComponent {
         labels,
         datasets: [{
           data: dataValues,
-          backgroundColor: colors.length > 0 ? colors : [...Object.values(STATUS_COLOR_MAP)]
+          backgroundColor: colors.length > 0 ? colors : Object.values(STATUS_COLOR_MAP)
         }]
       };
     } catch (error) {
@@ -119,7 +119,7 @@ export class ReadStatusChartComponent {
         labels: [],
         datasets: [{
           data: [],
-          backgroundColor: [...Object.values(STATUS_COLOR_MAP)]
+          backgroundColor: Object.values(STATUS_COLOR_MAP)
         }]
       };
     }

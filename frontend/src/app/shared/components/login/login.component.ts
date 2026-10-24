@@ -2,10 +2,10 @@ import {Component, effect, inject, OnInit} from '@angular/core';
 import {AuthService} from '../../service/auth.service';
 import {ActivatedRoute, Router} from '@angular/router';
 import {FormsModule} from '@angular/forms';
-import {Password} from 'primeng/password';
-import {Button} from 'primeng/button';
-import {Message} from 'primeng/message';
-import {InputText} from 'primeng/inputtext';
+import {Password} from '@openng/optimus-ui/password';
+import {Button} from '@openng/optimus-ui/button';
+import {Message} from '@openng/optimus-ui/message';
+import {InputText} from '@openng/optimus-ui/inputtext';
 import {take} from 'rxjs/operators';
 import {AppSettingsService} from '../../service/app-settings.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
@@ -25,6 +25,12 @@ import {OidcService} from '../../../core/security/oidc.service';
   styleUrls: ['./login.component.scss']
 })
 export class LoginComponent implements OnInit {
+  private readonly authService = inject(AuthService);
+  private readonly oidcService = inject(OidcService);
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly translocoService = inject(TranslocoService);
   username = '';
   password = '';
   errorMessage = '';
@@ -34,12 +40,6 @@ export class LoginComponent implements OnInit {
   isOidcLoginInProgress = false;
   showLocalLogin = true;
   private oidcOnlyAutoRedirect = false;
-  private authService = inject(AuthService);
-  private oidcService = inject(OidcService);
-  private appSettingsService = inject(AppSettingsService);
-  private router = inject(Router);
-  private route = inject(ActivatedRoute);
-  private translocoService = inject(TranslocoService);
 
   private readonly initPublicSettingsEffect = effect(() => {
     const publicSettings = this.appSettingsService.publicAppSettings();

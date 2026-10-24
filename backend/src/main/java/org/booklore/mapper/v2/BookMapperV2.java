@@ -12,6 +12,7 @@ import org.mapstruct.MappingTarget;
 import org.mapstruct.Named;
 import org.mapstruct.ReportingPolicy;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -34,7 +35,13 @@ public interface BookMapperV2 {
     @Mapping(target = "categories", source = "categories", qualifiedByName = "mapCategories")
     @Mapping(target = "moods", source = "moods", qualifiedByName = "mapMoods")
     @Mapping(target = "tags", source = "tags", qualifiedByName = "mapTags")
+    @Mapping(target = "allMetadataLocked", source = ".", qualifiedByName = "mapAllMetadataLocked")
     BookMetadata mapMetadata(BookMetadataEntity metadataEntity);
+
+    @Named("mapAllMetadataLocked")
+    default boolean mapAllMetadataLocked(BookMetadataEntity metadataEntity) {
+        return metadataEntity.areAllFieldsLocked();
+    }
 
     @AfterMapping
     default void mapAudiobookMetadata(BookEntity bookEntity, @MappingTarget Book book) {
@@ -55,7 +62,7 @@ public interface BookMapperV2 {
         BookFileEntity audiobookFile = bookEntity.getBookFiles() != null
                 ? bookEntity.getBookFiles().stream()
                     .filter(bf -> bf.getBookType() == BookFileType.AUDIOBOOK && bf.isBook())
-                    .findFirst()
+                    .min(Comparator.comparingLong(BookFileEntity::getId))
                     .orElse(null)
                 : null;
 
@@ -112,24 +119,25 @@ public interface BookMapperV2 {
     }
 
     @Named("mapPrimaryFile")
-    default BookFile mapPrimaryFile(List<BookFileEntity> bookFiles) {
+    default BookFile mapPrimaryFile(Set<BookFileEntity> bookFiles) {
         BookFileEntity primary = getPrimaryBookFile(bookFiles);
         return toBookFile(primary);
     }
 
     @Named("mapAlternativeFormats")
-    default List<BookFile> mapAlternativeFormats(List<BookFileEntity> bookFiles) {
+    default List<BookFile> mapAlternativeFormats(Set<BookFileEntity> bookFiles) {
         if (bookFiles == null) return null;
         BookFileEntity primary = getPrimaryBookFile(bookFiles);
         return bookFiles.stream()
                 .filter(BookFileEntity::isBook)
                 .filter(bf -> !bf.equals(primary))
                 .map(this::toBookFile)
+                .sorted(Comparator.comparingLong(BookFile::getId))
                 .toList();
     }
 
     @Named("mapSupplementaryFiles")
-    default List<BookFile> mapSupplementaryFiles(List<BookFileEntity> bookFiles) {
+    default List<BookFile> mapSupplementaryFiles(Set<BookFileEntity> bookFiles) {
         if (bookFiles == null) return null;
         return bookFiles.stream()
                 .filter(bf -> !bf.isBook())
@@ -137,11 +145,12 @@ public interface BookMapperV2 {
                 .toList();
     }
 
-    default BookFileEntity getPrimaryBookFile(List<BookFileEntity> bookFiles) {
+    default BookFileEntity getPrimaryBookFile(Set<BookFileEntity> bookFiles) {
         if (bookFiles == null || bookFiles.isEmpty()) return null;
 
         List<BookFileEntity> bookFormats = bookFiles.stream()
                 .filter(BookFileEntity::isBook)
+                .sorted(Comparator.comparingLong(BookFileEntity::getId))
                 .toList();
 
         if (bookFormats.isEmpty()) return null;

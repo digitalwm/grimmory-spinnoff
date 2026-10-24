@@ -1,19 +1,21 @@
-import {Component, effect, inject} from '@angular/core';
-import {DynamicDialogConfig, DynamicDialogRef} from 'primeng/dynamicdialog';
+import {HttpErrorResponse} from '@angular/common/http';
+import {Component, computed, effect, inject, signal, WritableSignal} from '@angular/core';
+import {DynamicDialogConfig, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {FormsModule} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {Select} from 'primeng/select';
-import {Textarea} from 'primeng/textarea';
-import {Tooltip} from 'primeng/tooltip';
-import {ProgressBar} from 'primeng/progressbar';
-import {FileUpload, FileSelectEvent} from 'primeng/fileupload';
+import {Button} from '@openng/optimus-ui/button';
+import {Select} from '@openng/optimus-ui/select';
+import {Textarea} from '@openng/optimus-ui/textarea';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {ProgressBar} from '@openng/optimus-ui/progressbar';
+import {FileUpload, FileSelectEvent} from '@openng/optimus-ui/fileupload';
+import {QueryClient} from '@tanstack/angular-query-experimental';
 import {BookService} from '../../service/book.service';
-import {BookMetadataService} from '../../service/book-metadata.service';
 import {LibraryService} from '../../service/library.service';
 import {Library} from '../../model/library.model';
 import {BookMetadata, CreatePhysicalBookRequest} from '../../model/book.model';
+import {MetadataSourceQueryService} from '../../../metadata/sources/metadata-source-query.service';
 import {TranslocoDirective} from '@jsverse/transloco';
-import {Tabs, TabList, Tab, TabPanels, TabPanel} from 'primeng/tabs';
+import {Tabs, TabList, Tab, TabPanels, TabPanel} from '@openng/optimus-ui/tabs';
 
 const MAX_ISBN_COUNT = 500;
 const MAX_FILE_SIZE_BYTES = 1_048_576; // 1 MB
@@ -58,28 +60,29 @@ type ImportPhase = 'upload' | 'processing' | 'summary';
   styleUrl: './bulk-isbn-import-dialog.component.scss',
 })
 export class BulkIsbnImportDialogComponent {
-  private dynamicDialogRef = inject(DynamicDialogRef);
-  private dialogConfig = inject(DynamicDialogConfig);
-  private bookService = inject(BookService);
-  private bookMetadataService = inject(BookMetadataService);
-  private libraryService = inject(LibraryService);
+  private readonly dynamicDialogRef = inject(DynamicDialogRef);
+  private readonly dialogConfig = inject(DynamicDialogConfig);
+  private readonly bookService = inject(BookService);
+  private readonly queryClient = inject(QueryClient);
+  private readonly sources = inject(MetadataSourceQueryService);
+  private readonly libraryService = inject(LibraryService);
 
   selectedLibraryId: number | null = null;
 
-  phase: ImportPhase = 'upload';
+  readonly phase: WritableSignal<ImportPhase> = signal('upload');
   pasteText = '';
-  entries: IsbnEntry[] = [];
-  skipped: SkippedEntry[] = [];
-  duplicatesRemoved = 0;
+  readonly entries: WritableSignal<IsbnEntry[]> = signal([]);
+  readonly skipped: WritableSignal<SkippedEntry[]> = signal([]);
+  readonly duplicatesRemoved = signal(0);
   showSkipped = false;
 
-  processedCount = 0;
-  createdCount = 0;
-  noMetadataCount = 0;
-  failedCount = 0;
+  readonly processedCount = signal(0);
+  readonly createdCount = signal(0);
+  readonly noMetadataCount = signal(0);
+  readonly failedCount = signal(0);
   cancelled = false;
 
-  parseError = '';
+  readonly parseError = signal('');
   readonly maxIsbnCount = MAX_ISBN_COUNT;
   private readonly initializeSelectedLibraryEffect = effect(() => {
     const libraries = this.libraries;
@@ -106,7 +109,7 @@ export class BulkIsbnImportDialogComponent {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      this.parseError = 'fileTooLarge';
+      this.parseError.set('fileTooLarge');
       return;
     }
 
@@ -124,39 +127,58 @@ export class BulkIsbnImportDialogComponent {
   }
 
   clearParsed(): void {
-    this.entries = [];
-    this.skipped = [];
-    this.duplicatesRemoved = 0;
-    this.parseError = '';
+    this.entries.set([]);
+    this.skipped.set([]);
+    this.duplicatesRemoved.set(0);
+    this.parseError.set('');
     this.pasteText = '';
   }
 
   canStartImport(): boolean {
-    return this.phase === 'upload' && this.entries.length > 0 && !!this.selectedLibraryId;
+    return this.phase() === 'upload' && this.entries().length > 0 && !!this.selectedLibraryId;
   }
 
   async startImport(): Promise<void> {
     if (!this.canStartImport()) return;
 
-    this.phase = 'processing';
-    this.processedCount = 0;
-    this.createdCount = 0;
-    this.noMetadataCount = 0;
-    this.failedCount = 0;
+    this.phase.set('processing');
+    this.processedCount.set(0);
+    this.createdCount.set(0);
+    this.noMetadataCount.set(0);
+    this.failedCount.set(0);
     this.cancelled = false;
 
-    for (const entry of this.entries) {
+    const updateEntry = (index: number, value: Partial<IsbnEntry>) => {
+      this.entries.update((e) => {
+        e[index] = {
+          ...e[index],
+          ...value
+        }
+
+        return [...e];
+      });
+    };
+
+    for (let i = 0; i < this.entries().length; i++) {
       if (this.cancelled) break;
 
-      entry.status = 'looking-up';
+      if (i > 0) {
+        await this.delay(DELAY_BETWEEN_REQUESTS_MS);
+      }
+
+      if (this.cancelled) break;
+
+      const { isbn } = this.entries()[i];
+
+      updateEntry(i, { status: 'looking-up' })
 
       try {
-        const metadata = await this.lookupIsbn(entry.isbn);
+        const metadata = await this.lookupIsbn(isbn);
         if (this.cancelled) break;
 
         const request: CreatePhysicalBookRequest = {
           libraryId: this.selectedLibraryId!,
-          isbn: entry.isbn,
+          isbn: isbn,
           title: metadata?.title || undefined,
           authors: metadata?.authors?.length ? [...metadata.authors] : undefined,
           description: metadata?.description || undefined,
@@ -170,28 +192,22 @@ export class BulkIsbnImportDialogComponent {
 
         await this.createBook(request);
 
-        if (metadata?.title) {
-          entry.status = 'created';
-          entry.title = metadata.title;
-          this.createdCount++;
+        if (metadata !== null) {
+          updateEntry(i, { status: 'created', title: metadata.title })
+          this.createdCount.update(v => v + 1);
         } else {
-          entry.status = 'created-no-metadata';
-          this.noMetadataCount++;
+          updateEntry(i, { status: 'created-no-metadata' })
+          this.noMetadataCount.update(v => v + 1);
         }
       } catch (err: unknown) {
-        entry.status = 'failed';
-        entry.error = err instanceof Error ? err.message : 'Unknown error';
-        this.failedCount++;
+        updateEntry(i, { status: 'failed', error: err instanceof Error ? err.message : 'Unknown error' })
+        this.failedCount.update(v => v + 1);
       }
 
-      this.processedCount++;
-
-      if (!this.cancelled && entry !== this.entries[this.entries.length - 1]) {
-        await this.delay(DELAY_BETWEEN_REQUESTS_MS);
-      }
+      this.processedCount.update(v => v + 1);
     }
 
-    this.phase = 'summary';
+    this.phase.set('summary');
   }
 
   cancelImport(): void {
@@ -202,18 +218,18 @@ export class BulkIsbnImportDialogComponent {
     this.dynamicDialogRef.close();
   }
 
-  get progressPercent(): number {
-    return this.entries.length > 0 ? Math.round((this.processedCount / this.entries.length) * 100) : 0;
-  }
+  readonly progressPercent = computed(
+    () => this.entries().length > 0 ? Math.round((this.processedCount() / this.entries().length) * 100) : 0
+  );
 
   get selectedLibraryName(): string {
     return this.libraries.find(l => l.id === this.selectedLibraryId)?.name ?? '';
   }
 
   private parseContent(content: string, source: string): void {
-    this.parseError = '';
-    this.skipped = [];
-    this.duplicatesRemoved = 0;
+    this.parseError.set('');
+    this.skipped.set([]);
+    this.duplicatesRemoved.set(0);
 
     // Strip BOM
     const cleaned = content.replace(/^\uFEFF/, '');
@@ -241,17 +257,17 @@ export class BulkIsbnImportDialogComponent {
       const normalized = this.normalizeIsbn(raw);
 
       if (!this.isValidIsbn(normalized)) {
-        this.skipped.push({value: raw, reason: 'invalid'});
+        this.skipped.update(s => [...s, {value: raw, reason: 'invalid'}]);
         continue;
       }
 
       if (seen.has(normalized)) {
-        this.duplicatesRemoved++;
+        this.duplicatesRemoved.update(v => v + 1);
         continue;
       }
 
       if (existingIsbns.has(normalized)) {
-        this.skipped.push({value: normalized, reason: 'alreadyExists'});
+        this.skipped.update(s => [...s, {value: normalized, reason: 'alreadyExists'}]);
         continue;
       }
 
@@ -260,14 +276,14 @@ export class BulkIsbnImportDialogComponent {
     }
 
     if (validEntries.length > MAX_ISBN_COUNT) {
-      this.parseError = 'tooMany';
-      this.entries = validEntries.slice(0, MAX_ISBN_COUNT);
+      this.parseError.set('tooMany');
+      this.entries.set(validEntries.slice(0, MAX_ISBN_COUNT));
     } else {
-      this.entries = validEntries;
+      this.entries.set(validEntries);
     }
 
-    if (this.entries.length === 0 && this.skipped.length === 0) {
-      this.parseError = 'empty';
+    if (this.entries().length === 0 && this.skipped().length === 0) {
+      this.parseError.set('empty');
     }
   }
 
@@ -333,25 +349,21 @@ export class BulkIsbnImportDialogComponent {
     return false;
   }
 
-  private lookupIsbn(isbn: string): Promise<BookMetadata | null> {
-    return new Promise((resolve) => {
-      this.bookMetadataService.lookupByIsbn(isbn).subscribe({
-        next: metadata => resolve(metadata),
-        error: err => {
-          // Retry once on potential rate limiting
-          if (err?.status === 429) {
-            setTimeout(() => {
-              this.bookMetadataService.lookupByIsbn(isbn).subscribe({
-                next: metadata => resolve(metadata),
-                error: () => resolve(null), // Still create with ISBN only
-              });
-            }, RETRY_DELAY_MS);
-          } else {
-            resolve(null); // No metadata found, still create with ISBN
-          }
-        },
-      });
-    });
+  private async lookupIsbn(isbn: string): Promise<BookMetadata | null> {
+    try {
+      return await this.queryClient.query(this.sources.isbnLookup(isbn));
+    } catch (err: unknown) {
+      if (!(err instanceof HttpErrorResponse) || err.status !== 429) {
+        return null;
+      }
+    }
+
+    await this.delay(RETRY_DELAY_MS);
+    try {
+      return await this.queryClient.query(this.sources.isbnLookup(isbn));
+    } catch {
+      return null;
+    }
   }
 
   private createBook(request: CreatePhysicalBookRequest): Promise<void> {

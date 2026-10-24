@@ -4,8 +4,8 @@ import { ReleaseNote, VersionService } from '../../../service/version.service';
 import DOMPurify from 'dompurify';
 import MarkdownIt from 'markdown-it';
 import {DatePipe} from '@angular/common';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
-import {Button} from 'primeng/button';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {Button} from '@openng/optimus-ui/button';
 import {TranslocoDirective} from '@jsverse/transloco';
 
 @Component({
@@ -21,13 +21,13 @@ import {TranslocoDirective} from '@jsverse/transloco';
 })
 export class VersionChangelogDialogComponent implements OnInit {
 
-  private versionService = inject(VersionService);
+  private readonly versionService = inject(VersionService);
   dialogRef = inject(DynamicDialogRef);
 
   changelog: ReleaseNote[] = [];
-  loading = signal(true);
+  readonly loading = signal(true);
 
-  private markdown = new MarkdownIt({ html: true });
+  private readonly markdown = new MarkdownIt({ html: true });
 
   ngOnInit(): void {
     this.versionService.getChangelog().subscribe({

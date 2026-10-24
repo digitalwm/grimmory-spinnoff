@@ -8,6 +8,7 @@ import org.booklore.model.dto.AudiobookMetadata;
 import org.booklore.model.dto.Book;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.request.FetchMetadataRequest;
+import org.booklore.model.dto.settings.MetadataProviderSettings;
 import org.booklore.model.enums.MetadataProvider;
 import org.booklore.service.appsettings.AppSettingService;
 import org.booklore.util.BookUtils;
@@ -35,6 +36,19 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class AudibleParser implements BookParser, DetailedMetadataProvider {
     private static final String DEFAULT_TLD = "com";
+
+    private static final Map<String, String> EXTERNAL_BASE_URIS = Map.of(
+            "com", "https://www.audible.com/",
+            "co.uk", "https://www.audible.co.uk/",
+            "de", "https://www.audible.de/",
+            "fr", "https://www.audible.fr/",
+            "it", "https://www.audible.it/",
+            "es", "https://www.audible.es/",
+            "ca", "https://www.audible.ca/",
+            "com.au", "https://www.audible.com.au/",
+            "co.jp", "https://www.audible.co.jp",
+            "in", "https://www.audible.in/"
+    );
 
     private static final Map<String, String> BASE_URIS = Map.of(
             "com", "https://api.audible.com/",
@@ -149,13 +163,27 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
             List<AudibleProduct> products
     ) {}
 
+    private String getTld() {
+        return getSettings().map(MetadataProviderSettings.Audible::getDomain).orElse(DEFAULT_TLD);
+    }
+
     private String getBaseURI() {
-        var settings = appSettingService.getAppSettings().getMetadataProviderSettings();
-        String tld = DEFAULT_TLD;
-        if (settings != null && settings.getAudible() != null && settings.getAudible().getDomain() != null) {
-            tld = settings.getAudible().getDomain();
+        return BASE_URIS.getOrDefault(getTld(), BASE_URIS.get(DEFAULT_TLD));
+    }
+
+    private String getExternalBaseURI() {
+        return EXTERNAL_BASE_URIS.getOrDefault(getTld(), EXTERNAL_BASE_URIS.get(DEFAULT_TLD));
+    }
+
+    private String buildExternalURI(String asin) {
+        if (asin == null) {
+            return null;
         }
-        return BASE_URIS.getOrDefault(tld, BASE_URIS.get(DEFAULT_TLD));
+
+        return UriComponentsBuilder.fromUriString(getExternalBaseURI())
+                .path("/pd/{asin}")
+                .build(asin)
+                .toString();
     }
 
     private URI getURI(
@@ -302,6 +330,24 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
         return metadata.getAsin();
     }
 
+    private Optional<MetadataProviderSettings.Audible> getSettings() {
+        var appSettings = appSettingService.getAppSettings();
+
+        if (
+                appSettings == null ||
+                appSettings.getMetadataProviderSettings() == null
+        ) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(appSettings.getMetadataProviderSettings().getAudible());
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return getSettings().map(MetadataProviderSettings.Audible::isEnabled).orElse(false);
+    }
+
     @Override
     public BookMetadata fetchTopMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         AudibleProduct existingProduct = lookup(getExistingAsin(book));
@@ -417,6 +463,7 @@ public class AudibleParser implements BookParser, DetailedMetadataProvider {
 
         return BookMetadata.builder()
                 .provider(MetadataProvider.Audible)
+                .externalUrl(buildExternalURI(product.asin))
                 .asin(product.asin)
                 .audibleId(product.asin)
                 .title(product.title)

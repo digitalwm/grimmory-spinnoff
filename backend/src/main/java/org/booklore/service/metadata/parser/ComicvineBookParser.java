@@ -9,6 +9,7 @@ import org.booklore.model.dto.request.FetchMetadataRequest;
 import org.booklore.model.dto.response.comicvineapi.Comic;
 import org.booklore.model.dto.response.comicvineapi.ComicvineApiResponse;
 import org.booklore.model.dto.response.comicvineapi.ComicvineSingleResponse;
+import org.booklore.model.dto.settings.MetadataProviderSettings;
 import org.booklore.model.enums.MetadataProvider;
 import org.booklore.service.appsettings.AppSettingService;
 import org.springframework.stereotype.Service;
@@ -92,6 +93,19 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         boolean isExpired() {
             return System.currentTimeMillis() - timestamp > CACHE_EXPIRATION_MS;
         }
+    }
+
+    @Override
+    public boolean isEnabled() {
+        boolean enabled = getSettings()
+                .map(MetadataProviderSettings.Comicvine::isEnabled)
+                .orElse(false);
+
+        String apiKey = getSettings()
+                .map(MetadataProviderSettings.Comicvine::getApiKey)
+                .orElse(null);
+
+        return enabled && apiKey != null && !apiKey.isBlank();
     }
 
     @Override
@@ -537,7 +551,7 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
             log.debug("ComicVine API call #{} to {}", callNumber, endpoint);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(uri)
-                    .header("User-Agent", "BookLore/1.0 (Book and Comic Metadata Fetcher; +https://github.com/booklore-app/booklore)")
+                    .header("User-Agent", "Grimmory/1.0 (Book and Comic Metadata Fetcher; +https://github.com/grimmory-tools/grimmory)")
                     .GET()
                     .build();
 
@@ -1013,8 +1027,21 @@ public class ComicvineBookParser implements BookParser, DetailedMetadataProvider
         }
     }
 
+    private Optional<MetadataProviderSettings.Comicvine> getSettings() {
+        var appSettings = appSettingService.getAppSettings();
+
+        if (
+                appSettings == null ||
+                appSettings.getMetadataProviderSettings() == null
+        ) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(appSettings.getMetadataProviderSettings().getComicvine());
+    }
+
     private String getApiToken() {
-        String apiToken = appSettingService.getAppSettings().getMetadataProviderSettings().getComicvine().getApiKey();
+        String apiToken = getSettings().map(MetadataProviderSettings.Comicvine::getApiKey).orElse(null);
         if (apiToken == null || apiToken.isEmpty()) {
             log.warn("Comicvine API token not set");
             return null;

@@ -1,9 +1,9 @@
 import {Component, DestroyRef, ElementRef, HostListener, computed, inject, OnInit, signal, viewChild} from '@angular/core';
 import {FormsModule} from '@angular/forms';
-import {ProgressSpinner} from 'primeng/progressspinner';
-import {InputText} from 'primeng/inputtext';
-import {Select} from 'primeng/select';
-import {Popover} from 'primeng/popover';
+import {ProgressSpinner} from '@openng/optimus-ui/progressspinner';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Select} from '@openng/optimus-ui/select';
+import {Popover} from '@openng/optimus-ui/popover';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 import {SeriesDataService} from '../../service/series-data.service';
 import {SeriesSummary} from '../../model/series.model';
@@ -62,16 +62,16 @@ export class SeriesBrowserComponent implements OnInit {
   private static readonly MIN_SCALE = 0.7;
   private static readonly MAX_SCALE = 1.3;
 
-  private seriesDataService = inject(SeriesDataService);
-  private bookService = inject(BookService);
-  private pageTitle = inject(PageTitleService);
-  private t = inject(TranslocoService);
-  private router = inject(Router);
-  private activatedRoute = inject(ActivatedRoute);
-  private destroyRef = inject(DestroyRef);
-  private scrollService = inject(RouteScrollPositionService);
-  private localStorageService = inject(LocalStorageService);
-  private layoutService = inject(LayoutService);
+  private readonly seriesDataService = inject(SeriesDataService);
+  private readonly bookService = inject(BookService);
+  private readonly pageTitle = inject(PageTitleService);
+  private readonly t = inject(TranslocoService);
+  private readonly router = inject(Router);
+  private readonly activatedRoute = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly scrollService = inject(RouteScrollPositionService);
+  private readonly localStorageService = inject(LocalStorageService);
+  private readonly layoutService = inject(LayoutService);
 
   readonly isBooksLoading = this.bookService.isBooksLoading;
   private readonly searchTerm = signal('');

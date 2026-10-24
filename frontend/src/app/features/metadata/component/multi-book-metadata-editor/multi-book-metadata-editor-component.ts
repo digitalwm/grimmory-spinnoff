@@ -1,11 +1,11 @@
 import {Component, computed, effect, inject, signal} from '@angular/core';
-import {Tab, TabList, TabPanel, TabPanels, Tabs} from 'primeng/tabs';
-import {DynamicDialogConfig, DynamicDialogRef} from 'primeng/dynamicdialog';
+import {Tab, TabList, TabPanel, TabPanels, Tabs} from '@openng/optimus-ui/tabs';
+import {DynamicDialogConfig, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {BookService} from '../../../book/service/book.service';
 import {UserService} from '../../../settings/user-management/user.service';
 import {MetadataEditorComponent} from '../book-metadata-center/metadata-editor/metadata-editor.component';
 import {MetadataSearcherComponent} from '../book-metadata-center/metadata-searcher/metadata-searcher.component';
-import {Button} from 'primeng/button';
+import {Button} from '@openng/optimus-ui/button';
 import {injectQuery} from '@tanstack/angular-query-experimental';
 
 @Component({
@@ -33,12 +33,9 @@ export class MultiBookMetadataEditorComponent {
   bookIds: number[] = this.config.data?.bookIds ?? [];
   loading = false;
 
-  filteredBooks = computed(() => this.bookService.books().filter(book =>
-    !!book.metadata && this.bookIds.includes(book.id)
-  ));
-  private currentIndex = signal(0);
-  private currentBookId = computed(() => this.filteredBooks()[this.currentIndex()]?.id ?? null);
-  private bookDetailQuery = injectQuery(() => ({
+  private readonly currentIndex = signal(0);
+  private readonly currentBookId = computed(() => this.bookIds[this.currentIndex()] ?? null);
+  private readonly bookDetailQuery = injectQuery(() => ({
     ...this.bookService.bookDetailQueryOptions(this.currentBookId() ?? -1, true),
     enabled: this.currentBookId() != null,
   }));
@@ -58,7 +55,7 @@ export class MultiBookMetadataEditorComponent {
 
   handleNextBook() {
     const next = this.currentIndex() + 1;
-    if (next < this.filteredBooks().length) {
+    if (next < this.bookIds.length) {
       this.currentIndex.set(next);
     }
   }
@@ -75,7 +72,7 @@ export class MultiBookMetadataEditorComponent {
   }
 
   get disableNext(): boolean {
-    return this.currentIndex() >= this.filteredBooks().length - 1;
+    return this.currentIndex() >= this.bookIds.length - 1;
   }
 
   get disablePrevious(): boolean {

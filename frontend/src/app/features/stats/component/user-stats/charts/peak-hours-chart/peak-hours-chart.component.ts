@@ -4,8 +4,8 @@ import {BaseChartDirective} from 'ng2-charts';
 import {ChartConfiguration, ChartData} from 'chart.js';
 import {BehaviorSubject, EMPTY, Observable} from 'rxjs';
 import {catchError} from 'rxjs/operators';
-import {Select} from 'primeng/select';
-import {Tooltip} from 'primeng/tooltip';
+import {Select} from '@openng/optimus-ui/select';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {FormsModule} from '@angular/forms';
 import {PeakHoursResponse, UserStatsService} from '../../../../../settings/user-management/user-stats.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
@@ -22,13 +22,12 @@ type PeakHoursChartData = ChartData<'line', number[], string>;
   styleUrls: ['./peak-hours-chart.component.scss']
 })
 export class PeakHoursChartComponent implements OnInit {
-  public readonly chartType = 'line' as const;
-  public readonly chartData$: Observable<PeakHoursChartData>;
-  public readonly chartOptions: ChartConfiguration['options'];
-
   private readonly userStatsService = inject(UserStatsService);
   private readonly t = inject(TranslocoService);
   private readonly destroyRef = inject(DestroyRef);
+  public readonly chartType = 'line' as const;
+  public readonly chartData$: Observable<PeakHoursChartData>;
+  public readonly chartOptions: ChartConfiguration['options'];
   private readonly chartDataSubject: BehaviorSubject<PeakHoursChartData>;
 
   public selectedYear: number | null = null;
@@ -80,8 +79,7 @@ export class PeakHoursChartComponent implements OnInit {
               }
             }
           }
-        },
-        datalabels: {display: false}
+        }
       },
       scales: {
         x: {

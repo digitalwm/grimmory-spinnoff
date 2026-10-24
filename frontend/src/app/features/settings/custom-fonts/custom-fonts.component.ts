@@ -1,15 +1,15 @@
 import {Component, DestroyRef, inject, OnInit} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {Button} from 'primeng/button';
-import {MessageService} from 'primeng/api';
+import {Button} from '@openng/optimus-ui/button';
+import {MessageService} from '@openng/optimus-ui/api';
 import {CustomFontService} from '../../../shared/service/custom-font.service';
 import {CustomFont, formatFileSize} from '../../../shared/model/custom-font.model';
-import {ConfirmDialog} from 'primeng/confirmdialog';
-import {ConfirmationService} from 'primeng/api';
-import {Tooltip} from 'primeng/tooltip';
-import {DialogService, DynamicDialogRef} from 'primeng/dynamicdialog';
+import {ConfirmDialog} from '@openng/optimus-ui/confirmdialog';
+import {ConfirmationService} from '@openng/optimus-ui/api';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
+import {DialogService, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {FontUploadDialogComponent} from './font-upload-dialog/font-upload-dialog.component';
-import {Skeleton} from 'primeng/skeleton';
+import {Skeleton} from '@openng/optimus-ui/skeleton';
 import {DialogSize, DialogStyle} from '../../../shared/services/dialog-launcher.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {DatePipe} from '@angular/common';
@@ -24,17 +24,16 @@ import {DatePipe} from '@angular/common';
   providers: [ConfirmationService, DialogService]
 })
 export class CustomFontsComponent implements OnInit {
+  private readonly customFontService = inject(CustomFontService);
+  private readonly messageService = inject(MessageService);
+  private readonly confirmationService = inject(ConfirmationService);
+  private readonly dialogService = inject(DialogService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
   fontsLoadedInBrowser = false;
   uploadDialogRef: DynamicDialogRef | null = null;
 
   readonly maxFonts = 10;
-
-  private customFontService = inject(CustomFontService);
-  private messageService = inject(MessageService);
-  private confirmationService = inject(ConfirmationService);
-  private dialogService = inject(DialogService);
-  private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
 
   get customFonts(): CustomFont[] { return this.customFontService.fonts(); }
   get isLoading(): boolean { return this.customFontService.isFontsLoading(); }

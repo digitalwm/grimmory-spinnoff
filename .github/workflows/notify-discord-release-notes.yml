@@ -11,11 +11,6 @@ on:
         description: 'Resolved commit SHA for the candidate build'
         required: true
         type: string
-      base_tag:
-        description: 'Stable base tag that the candidate is built on top of'
-        required: false
-        default: ''
-        type: string
       mention_text:
         description: 'Optional role mentions or intro text to prepend to the message'
         required: false
@@ -166,7 +161,7 @@ jobs:
                             type: 2,
                             style: 5,
                             label: "Report Issue",
-                            url: "https://github.com/orgs/grimmory-tools/discussions/new?category=issue-triage"
+                            url: "https://github.com/grimmory-tools/grimmory/issues/new?template=bug-report.yml"
                           }
                         ]
                       }
@@ -182,7 +177,7 @@ jobs:
                             type: 2,
                             style: 5,
                             label: "Report Issue",
-                            url: "https://github.com/orgs/grimmory-tools/discussions/new?category=issue-triage"
+                            url: "https://github.com/grimmory-tools/grimmory/issues/new?template=bug-report.yml"
                           }
                         ]
                       }

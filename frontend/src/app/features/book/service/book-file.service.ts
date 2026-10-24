@@ -1,31 +1,29 @@
-import {inject, Injectable} from '@angular/core';
+import {inject, Service} from '@angular/core';
 import {Observable, throwError, from} from 'rxjs';
-import {HttpClient} from '@angular/common/http';
-import {catchError, tap} from 'rxjs/operators';
+import {HttpClient, HttpEventType, HttpRequest} from '@angular/common/http';
+import {catchError, filter, map, tap} from 'rxjs/operators';
 import {AdditionalFile, AdditionalFileType, Book, DetachBookFileResponse, DuplicateDetectionRequest, DuplicateGroup} from '../model/book.model';
 import {API_CONFIG} from '../../../core/config/api-config';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {FileDownloadService} from '../../../shared/service/file-download.service';
 import {CacheStorageService} from '../../../shared/service/cache-storage.service';
 import {LocalSettingsService} from '../../../shared/service/local-settings.service';
 import {TranslocoService} from '@jsverse/transloco';
 import {QueryClient} from '@tanstack/angular-query-experimental';
-import {patchBookInCacheWith, patchBooksInCache, removeBooksFromCache} from './book-query-cache';
+import {patchAttachedBookFilesInCache, patchBookInCacheWith, upsertBooksInCache} from './legacy-book-cache';
+import {mitigateWebkitUploadBug} from '../../../shared/util/mitigate-webkit-upload-bug';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class BookFileService {
+  private readonly http = inject(HttpClient);
+  private readonly messageService = inject(MessageService);
+  private readonly fileDownloadService = inject(FileDownloadService);
+  private readonly queryClient = inject(QueryClient);
+  private readonly cacheStorageService = inject(CacheStorageService);
+  private readonly localSettingsService = inject(LocalSettingsService);
+  private readonly t = inject(TranslocoService);
 
   private readonly url = `${API_CONFIG.BASE_URL}/api/v1/books`;
-
-  private http = inject(HttpClient);
-  private messageService = inject(MessageService);
-  private fileDownloadService = inject(FileDownloadService);
-  private queryClient = inject(QueryClient);
-  private cacheStorageService = inject(CacheStorageService);
-  private localSettingsService = inject(LocalSettingsService);
-  private readonly t = inject(TranslocoService);
 
   getFileContent(bookId: number, bookType?: string): Observable<Blob> {
     let url = `${this.url}/${bookId}/content`;
@@ -80,7 +78,7 @@ export class BookFileService {
       tap(() => {
         patchBookInCacheWith(this.queryClient, bookId, book => {
           if (isPrimary) {
-            const remaining = book.alternativeFormats?.filter(f => f.id !== fileId) || [];
+            const remaining = book.alternativeFormats?.filter(f => f.id !== fileId) ?? [];
             const [newPrimary, ...rest] = remaining;
             return {...book, primaryFile: newPrimary, alternativeFormats: rest};
           }
@@ -131,13 +129,20 @@ export class BookFileService {
         formData.append('bookType', bookType);
       }
     }
-    return this.http.post<AdditionalFile>(`${this.url}/${bookId}/files`, formData).pipe(
-      tap(newFile => {
+
+    const req = mitigateWebkitUploadBug(
+      new HttpRequest('POST', `${this.url}/${bookId}/files`, formData)
+    );
+
+    return this.http.request<AdditionalFile>(req)
+      .pipe(filter(e => e.type == HttpEventType.Response))
+      .pipe(map(e => e.body!))
+      .pipe(tap(newFile => {
         patchBookInCacheWith(this.queryClient, bookId, book => {
           if (fileType === AdditionalFileType.ALTERNATIVE_FORMAT) {
-            return {...book, alternativeFormats: [...(book.alternativeFormats || []), newFile]};
+            return {...book, alternativeFormats: [...(book.alternativeFormats ?? []), newFile]};
           }
-          return {...book, supplementaryFiles: [...(book.supplementaryFiles || []), newFile]};
+          return {...book, supplementaryFiles: [...(book.supplementaryFiles ?? []), newFile]};
         });
         this.messageService.add({
           severity: 'success',
@@ -158,8 +163,8 @@ export class BookFileService {
 
   downloadAdditionalFile(book: Book, fileId: number): void {
     const additionalFile = [
-      ...(book.alternativeFormats || []),
-      ...(book.supplementaryFiles || [])
+      ...(book.alternativeFormats ?? []),
+      ...(book.supplementaryFiles ?? [])
     ].find((f: AdditionalFile) => f.id === fileId);
     const downloadUrl = `${this.url}/${book.id}/files/${fileId}/download`;
     this.fileDownloadService.downloadFile(downloadUrl, additionalFile?.fileName ?? 'file');
@@ -168,7 +173,7 @@ export class BookFileService {
   detachBookFile(bookId: number, fileId: number, copyMetadata: boolean): Observable<DetachBookFileResponse> {
     return this.http.post<DetachBookFileResponse>(`${this.url}/${bookId}/files/${fileId}/detach`, {copyMetadata}).pipe(
       tap(response => {
-        patchBooksInCache(this.queryClient, [response.sourceBook, response.newBook]);
+        upsertBooksInCache(this.queryClient, [response.sourceBook, response.newBook]);
         this.messageService.add({
           severity: 'success',
           summary: this.t.translate('metadata.viewer.toast.detachFileSuccessSummary'),
@@ -196,8 +201,11 @@ export class BookFileService {
       moveFiles
     }).pipe(
       tap(response => {
-        patchBooksInCache(this.queryClient, [response.updatedBook]);
-        removeBooksFromCache(this.queryClient, response.deletedSourceBookIds);
+        patchAttachedBookFilesInCache(
+          this.queryClient,
+          response.updatedBook,
+          response.deletedSourceBookIds,
+        );
         this.messageService.add({
           severity: 'success',
           summary: this.t.translate('book.bookService.toast.filesAttachedSummary'),

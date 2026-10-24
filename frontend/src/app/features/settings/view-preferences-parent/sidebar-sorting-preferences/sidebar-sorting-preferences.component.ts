@@ -1,7 +1,7 @@
 import {Component, computed, inject} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
-import {Select} from 'primeng/select';
-import {MessageService} from 'primeng/api';
+import {Select} from '@openng/optimus-ui/select';
+import {MessageService} from '@openng/optimus-ui/api';
 import {FormsModule} from '@angular/forms';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {LayoutService} from '../../../../shared/layout/layout.service';
@@ -18,16 +18,15 @@ import {SortPref} from '../../../../shared/layout/sidebar-sort-preferences';
   styleUrl: './sidebar-sorting-preferences.component.scss'
 })
 export class SidebarSortingPreferencesComponent {
+  private readonly layoutService = inject(LayoutService);
+  private readonly messageService = inject(MessageService);
+  private readonly t = inject(TranslocoService);
   private readonly sortingOptionDefs = [
     {value: {field: 'name', order: 'asc'}, translationKey: 'nameAsc'},
     {value: {field: 'name', order: 'desc'}, translationKey: 'nameDesc'},
     {value: {field: 'id', order: 'asc'}, translationKey: 'creationAsc'},
     {value: {field: 'id', order: 'desc'}, translationKey: 'creationDesc'},
   ] satisfies {value: SortPref; translationKey: string}[];
-
-  private readonly layoutService = inject(LayoutService);
-  private readonly messageService = inject(MessageService);
-  private readonly t = inject(TranslocoService);
   private readonly activeLang = toSignal(this.t.langChanges$, {initialValue: this.t.getActiveLang()});
 
   readonly selectedLibrarySorting = this.layoutService.librarySort;

@@ -1,14 +1,14 @@
 import {DecimalPipe} from '@angular/common';
 import {Component, computed, effect, untracked, inject, input} from '@angular/core';
-import {Button} from 'primeng/button';
+import {Button} from '@openng/optimus-ui/button';
 import {FormsModule} from '@angular/forms';
 import {TranslocoDirective} from '@jsverse/transloco';
 import {ReaderPreferencesService} from '../reader-preferences.service';
 import {UserSettings} from '../../user-management/user.service';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {CustomFontService} from '../../../../shared/service/custom-font.service';
 import {addCustomFontsToDropdown, FontPreferenceItem} from '../../../../shared/util/custom-font.util';
-import {Skeleton} from 'primeng/skeleton';
+import {Skeleton} from '@openng/optimus-ui/skeleton';
 import {themes} from '../../../readers/ebook-reader/state/themes.constant';
 
 @Component({
@@ -25,11 +25,10 @@ import {themes} from '../../../readers/ebook-reader/state/themes.constant';
   styleUrl: './epub-reader-preferences-component.scss'
 })
 export class EpubReaderPreferencesComponent {
-
-  userSettings = input.required<UserSettings>();
-
   private readonly readerPreferencesService = inject(ReaderPreferencesService);
   private readonly customFontService = inject(CustomFontService);
+
+  readonly userSettings = input.required<UserSettings>();
 
   private static readonly baseFonts: FontPreferenceItem[] = [
     {name: 'Book Default', displayName: 'Default', key: null},
@@ -57,7 +56,7 @@ export class EpubReaderPreferencesComponent {
     if (fonts.length === 0 && this.customFontService.isFontsLoading()) return;
 
     untracked(() => {
-      this.customFontService.loadAllFonts(fonts).catch(err => {
+      this.customFontService.loadAllFonts(fonts).catch((err: unknown) => {
         console.error('Failed to load custom fonts:', err);
       });
     });
@@ -189,6 +188,15 @@ export class EpubReaderPreferencesComponent {
   set flow(value: 'paginated' | 'scrolled') {
     this.userSettings().ebookReaderSetting.flow = value;
     this.readerPreferencesService.updatePreference(['ebookReaderSetting', 'flow'], value);
+  }
+
+  get tapToTurnPage(): boolean {
+    return this.userSettings().ebookReaderSetting.tapToTurnPage ?? true;
+  }
+
+  set tapToTurnPage(value: boolean) {
+    this.userSettings().ebookReaderSetting.tapToTurnPage = value;
+    this.readerPreferencesService.updatePreference(['ebookReaderSetting', 'tapToTurnPage'], value);
   }
 
   increaseFontSize() {

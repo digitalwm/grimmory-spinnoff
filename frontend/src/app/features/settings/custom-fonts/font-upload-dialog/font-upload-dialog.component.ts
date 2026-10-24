@@ -1,11 +1,11 @@
 import {Component, ViewChild, ElementRef, OnDestroy, inject} from '@angular/core';
-import {Button} from 'primeng/button';
-import {MessageService} from 'primeng/api';
+import {Button} from '@openng/optimus-ui/button';
+import {MessageService} from '@openng/optimus-ui/api';
 import {CustomFontService} from '../../../../shared/service/custom-font.service';
 import {formatFileSize} from '../../../../shared/model/custom-font.model';
-import {InputText} from 'primeng/inputtext';
+import {InputText} from '@openng/optimus-ui/inputtext';
 import {FormsModule} from '@angular/forms';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 
 @Component({
@@ -16,11 +16,11 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
   styleUrls: ['./font-upload-dialog.component.scss']
 })
 export class FontUploadDialogComponent implements OnDestroy {
-  @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
-  private customFontService = inject(CustomFontService);
-  private messageService = inject(MessageService);
-  private dialogRef = inject(DynamicDialogRef);
+  private readonly customFontService = inject(CustomFontService);
+  private readonly messageService = inject(MessageService);
+  private readonly dialogRef = inject(DynamicDialogRef);
   private readonly t = inject(TranslocoService);
+  @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
 
   isUploading = false;
   uploadedFontName = '';

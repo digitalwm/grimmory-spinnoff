@@ -17,14 +17,6 @@ public class NativeLibraryManager {
         return libs.isPdfiumAvailable();
     }
 
-    public boolean isLibArchiveAvailable() {
-        return libs.isLibArchiveAvailable();
-    }
-
-    public boolean isEpubNativeAvailable() {
-        return libs.isEpubNativeAvailable();
-    }
-
     public boolean isAvailable(NativeLibraries.Library library) {
         return libs.isAvailable(library);
     }

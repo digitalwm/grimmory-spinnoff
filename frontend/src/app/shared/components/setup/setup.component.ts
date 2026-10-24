@@ -2,9 +2,9 @@ import {Component, inject, signal} from '@angular/core';
 import {FormBuilder, FormGroup, ReactiveFormsModule, Validators} from '@angular/forms';
 import {Router} from '@angular/router';
 import {SetupService} from './setup.service';
-import {InputText} from 'primeng/inputtext';
-import {Button} from 'primeng/button';
-import {Message} from 'primeng/message';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Button} from '@openng/optimus-ui/button';
+import {Message} from '@openng/optimus-ui/message';
 import {passwordMatchValidator} from '../../validators/password-match.validator';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 
@@ -22,14 +22,14 @@ import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
   ]
 })
 export class SetupComponent {
-  private fb = inject(FormBuilder);
-  private setupService = inject(SetupService);
-  private router = inject(Router);
+  private readonly fb = inject(FormBuilder);
+  private readonly setupService = inject(SetupService);
+  private readonly router = inject(Router);
+  private readonly t = inject(TranslocoService);
   setupForm: FormGroup;
-  loading = signal(false);
+  readonly loading = signal(false);
   error: string | null = null;
   success = false;
-  private readonly t = inject(TranslocoService);
 
   constructor() {
     this.setupForm = this.fb.group({

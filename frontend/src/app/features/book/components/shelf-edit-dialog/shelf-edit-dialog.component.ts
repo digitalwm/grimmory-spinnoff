@@ -1,15 +1,15 @@
 import {Component, effect, inject, Injector, OnInit} from '@angular/core';
 import {ShelfService} from '../../service/shelf.service';
-import {DynamicDialogConfig, DynamicDialogRef} from 'primeng/dynamicdialog';
-import {Button} from 'primeng/button';
-import {InputText} from 'primeng/inputtext';
+import {DynamicDialogConfig, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {Button} from '@openng/optimus-ui/button';
+import {InputText} from '@openng/optimus-ui/inputtext';
 
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {Shelf} from '../../model/shelf.model';
-import {MessageService} from 'primeng/api';
+import {MessageService} from '@openng/optimus-ui/api';
 import {IconPickerService} from '../../../../shared/service/icon-picker.service';
 import {IconDisplayComponent} from '../../../../shared/components/icon-display/icon-display.component';
-import {Checkbox} from 'primeng/checkbox';
+import {Checkbox} from '@openng/optimus-ui/checkbox';
 import {UserService} from '../../../settings/user-management/user.service';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {IconSelection, toIconSelection} from '../../../../shared/icons/icon-selection';
@@ -31,12 +31,12 @@ import {IconSelection, toIconSelection} from '../../../../shared/icons/icon-sele
 })
 export class ShelfEditDialogComponent implements OnInit {
 
-  private shelfService = inject(ShelfService);
-  private dynamicDialogConfig = inject(DynamicDialogConfig);
-  private dynamicDialogRef = inject(DynamicDialogRef);
-  private messageService = inject(MessageService);
-  private iconPickerService = inject(IconPickerService);
-  private userService = inject(UserService);
+  private readonly shelfService = inject(ShelfService);
+  private readonly dynamicDialogConfig = inject(DynamicDialogConfig);
+  private readonly dynamicDialogRef = inject(DynamicDialogRef);
+  private readonly messageService = inject(MessageService);
+  private readonly iconPickerService = inject(IconPickerService);
+  private readonly userService = inject(UserService);
   private readonly t = inject(TranslocoService);
   private readonly injector = inject(Injector);
   private shelfInitialized = false;

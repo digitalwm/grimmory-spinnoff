@@ -1,16 +1,16 @@
 import {Component, DestroyRef, effect, inject, signal} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
-import {Button} from 'primeng/button';
-import {MessageService} from 'primeng/api';
+import {Button} from '@openng/optimus-ui/button';
+import {MessageService} from '@openng/optimus-ui/api';
 import {AppSettingsService} from '../../../shared/service/app-settings.service';
 import {forkJoin, of} from 'rxjs';
 import {AppSettingKey} from '../../../shared/model/app-settings.model';
 import {catchError} from 'rxjs/operators';
 import {Library} from '../../book/model/library.model';
 import {LibraryService} from '../../book/service/library.service';
-import {InputText} from 'primeng/inputtext';
-import {Tooltip} from 'primeng/tooltip';
+import {InputText} from '@openng/optimus-ui/inputtext';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {ExternalDocLinkComponent} from '../../../shared/components/external-doc-link/external-doc-link.component';
 import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/transloco';
 import {replacePlaceholders} from '../../../shared/util/pattern-resolver';
@@ -23,6 +23,11 @@ import {replacePlaceholders} from '../../../shared/util/pattern-resolver';
   styleUrls: ['./file-naming-pattern.component.scss'],
 })
 export class FileNamingPatternComponent {
+  private readonly appSettingsService = inject(AppSettingsService);
+  private readonly messageService = inject(MessageService);
+  private readonly libraryService = inject(LibraryService);
+  private readonly t = inject(TranslocoService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly exampleMetadata: Record<string, string> = {
     title: "The Name of the Wind",
     subtitle: "Special Edition",
@@ -36,12 +41,6 @@ export class FileNamingPatternComponent {
   };
 
   defaultErrorMessage = '';
-
-  private appSettingsService = inject(AppSettingsService);
-  private messageService = inject(MessageService);
-  private libraryService = inject(LibraryService);
-  private t = inject(TranslocoService);
-  private destroyRef = inject(DestroyRef);
 
   private readonly hasUserEditedDefaultPattern = signal(false);
   readonly defaultPattern = signal('');

@@ -48,8 +48,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-import org.springframework.data.domain.PageImpl;
-
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -64,7 +62,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import java.util.ArrayList;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -271,7 +268,7 @@ class KoboEntitlementServiceTest {
         primaryFile.setBook(book);
         primaryFile.setBookType(BookFileType.CBX);
         primaryFile.setFileSizeKb(1024L);
-        book.setBookFiles(List.of(primaryFile));
+        book.setBookFiles(Set.of(primaryFile));
 
         BookMetadataEntity metadata = new BookMetadataEntity();
         metadata.setTitle("Test CBX Book");
@@ -521,7 +518,7 @@ class KoboEntitlementServiceTest {
     private BookEntity createEpubBookEntity(Long id) {
         BookEntity book = new BookEntity();
         book.setId(id);
-        book.setBookFiles(new ArrayList<>());
+        book.setBookFiles(new HashSet<>());
 
         BookFileEntity bookFile = BookFileEntity.builder()
                 .book(book)
@@ -614,7 +611,6 @@ class KoboEntitlementServiceTest {
                     .build();
 
             KoboSyncSettings settings = new KoboSyncSettings();
-            settings.setTwoWayProgressSync(true);
 
             when(bookQueryService.findAllWithMetadataByIds(Set.of(1L))).thenReturn(List.of(book));
             when(koboCompatibilityService.isBookSupportedForKobo(book)).thenReturn(true);
@@ -677,7 +673,6 @@ class KoboEntitlementServiceTest {
             KoboReadingStateEntity existingEntity = new KoboReadingStateEntity();
 
             KoboSyncSettings settings = new KoboSyncSettings();
-            settings.setTwoWayProgressSync(true);
 
             when(bookQueryService.findAllWithMetadataByIds(Set.of(1L))).thenReturn(List.of(book));
             when(koboCompatibilityService.isBookSupportedForKobo(book)).thenReturn(true);
@@ -770,7 +765,7 @@ class KoboEntitlementServiceTest {
             primaryFile.setId(10L);
             primaryFile.setBook(book);
             primaryFile.setBookType(BookFileType.EPUB);
-            book.setBookFiles(List.of(primaryFile));
+            book.setBookFiles(Set.of(primaryFile));
 
             UserBookProgressEntity progress = new UserBookProgressEntity();
             progress.setBook(book);
@@ -778,7 +773,6 @@ class KoboEntitlementServiceTest {
             progress.setReadStatus(ReadStatus.READING);
 
             KoboSyncSettings settings = new KoboSyncSettings();
-            settings.setTwoWayProgressSync(true);
             when(koboSettingsService.getCurrentUserSettings()).thenReturn(settings);
 
             UserBookFileProgressEntity fileProgress = new UserBookFileProgressEntity();
@@ -825,7 +819,7 @@ class KoboEntitlementServiceTest {
             alternateAudiobook.setBook(book);
             alternateAudiobook.setBookType(BookFileType.AUDIOBOOK);
 
-            book.setBookFiles(List.of(primaryEpub, alternateAudiobook));
+            book.setBookFiles(Set.of(primaryEpub, alternateAudiobook));
 
             UserBookProgressEntity progress = new UserBookProgressEntity();
             progress.setBook(book);
@@ -833,7 +827,6 @@ class KoboEntitlementServiceTest {
             progress.setReadStatus(ReadStatus.READING);
 
             KoboSyncSettings settings = new KoboSyncSettings();
-            settings.setTwoWayProgressSync(true);
             when(koboSettingsService.getCurrentUserSettings()).thenReturn(settings);
 
             UserBookFileProgressEntity epubFileProgress = new UserBookFileProgressEntity();
@@ -894,7 +887,7 @@ class KoboEntitlementServiceTest {
         }
 
         @Test
-        @DisplayName("Should include epub progress in bookmark when two-way sync ON")
+        @DisplayName("Should include epub progress in bookmark")
         void generateChangedReadingStates_twoWaySync() {
             BookEntity book = new BookEntity();
             book.setId(1L);
@@ -905,7 +898,6 @@ class KoboEntitlementServiceTest {
             progress.setReadStatus(ReadStatus.READING);
 
             KoboSyncSettings settings = new KoboSyncSettings();
-            settings.setTwoWayProgressSync(true);
             when(koboSettingsService.getCurrentUserSettings()).thenReturn(settings);
 
             KoboReadingState.CurrentBookmark bookmark = KoboReadingState.CurrentBookmark.builder()
@@ -924,36 +916,6 @@ class KoboEntitlementServiceTest {
             assertEquals(1, result.size());
             assertEquals(70, result.getFirst().getChangedReadingState().getReadingState()
                     .getCurrentBookmark().getProgressPercent());
-        }
-
-        @Test
-        @DisplayName("Should NOT include epub progress in bookmark when two-way sync OFF")
-        void generateChangedReadingStates_twoWaySyncOff() {
-            BookEntity book = new BookEntity();
-            book.setId(1L);
-
-            UserBookProgressEntity progress = new UserBookProgressEntity();
-            progress.setBook(book);
-            progress.setKoboProgressPercent(null);
-            progress.setEpubProgressPercent(70f);
-            progress.setReadStatus(ReadStatus.READING);
-
-            KoboSyncSettings settings = new KoboSyncSettings();
-            settings.setTwoWayProgressSync(false);
-            when(koboSettingsService.getCurrentUserSettings()).thenReturn(settings);
-
-            KoboReadingState.CurrentBookmark emptyBookmark = KoboReadingState.CurrentBookmark.builder().build();
-            when(readingStateBuilder.buildEmptyBookmark(any(OffsetDateTime.class))).thenReturn(emptyBookmark);
-            when(readingStateBuilder.buildStatusInfoFromProgress(eq(progress), anyString()))
-                    .thenReturn(KoboReadingState.StatusInfo.builder()
-                            .status(KoboReadStatus.READING)
-                            .timesStartedReading(1)
-                            .build());
-
-            List<ChangedReadingState> result = koboEntitlementService.generateChangedReadingStates(List.of(progress));
-
-            assertEquals(1, result.size());
-            verify(readingStateBuilder).buildEmptyBookmark(any(OffsetDateTime.class));
         }
     }
 }

@@ -1,8 +1,8 @@
 import {SimpleChange} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {TranslocoService} from '@jsverse/transloco';
-import {MessageService} from 'primeng/api';
-import {DialogService} from 'primeng/dynamicdialog';
+import {MessageService} from '@openng/optimus-ui/api';
+import {DialogService} from '@openng/optimus-ui/dynamicdialog';
 import {Subject, throwError} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
@@ -168,6 +168,17 @@ describe('AuthorEditorComponent', () => {
       summary: 'authorBrowser.editor.toast.successSummary',
       detail: 'authorBrowser.editor.toast.successDetail',
     });
+  });
+
+  it('sends the author name when it has actually changed', () => {
+    updateAuthor.mockReturnValue(new Subject<AuthorDetails>());
+
+    const component = createComponent();
+    component.ngOnInit();
+    component.form.patchValue({name: 'Augusta Ada King'});
+    component.onSave();
+
+    expect(updateAuthor).toHaveBeenCalledWith(9, expect.objectContaining({name: 'Augusta Ada King'}));
   });
 
   it('clears the saving flag and reports an error toast when saveMetadata fails', () => {

@@ -1,20 +1,21 @@
 import {ChangeDetectorRef, Component, inject, ViewChild, effect, signal} from '@angular/core';
-import {FileSelectEvent, FileUpload, FileUploadHandlerEvent} from 'primeng/fileupload';
-import {Button} from 'primeng/button';
+import {FileSelectEvent, FileUpload, FileUploadHandlerEvent} from '@openng/optimus-ui/fileupload';
+import {Button} from '@openng/optimus-ui/button';
 import {FormsModule} from '@angular/forms';
-import {MessageService} from 'primeng/api';
-import {Select} from 'primeng/select';
-import {Badge} from 'primeng/badge';
+import {MessageService} from '@openng/optimus-ui/api';
+import {Select} from '@openng/optimus-ui/select';
+import {Badge} from '@openng/optimus-ui/badge';
 import {LibraryService} from '../../../features/book/service/library.service';
 import {Library, LibraryPath} from '../../../features/book/model/library.model';
 import {API_CONFIG} from '../../../core/config/api-config';
 import {HttpClient, HttpEventType, HttpRequest} from '@angular/common/http';
-import {Tooltip} from 'primeng/tooltip';
+import {Tooltip} from '@openng/optimus-ui/tooltip';
 import {AppSettingsService} from '../../service/app-settings.service';
-import {SelectButton} from 'primeng/selectbutton';
-import {DynamicDialogRef} from 'primeng/dynamicdialog';
-import {ProgressBar} from 'primeng/progressbar';
+import {SelectButton} from '@openng/optimus-ui/selectbutton';
+import {DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
+import {ProgressBar} from '@openng/optimus-ui/progressbar';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
+import {mitigateWebkitUploadBug} from '../../util/mitigate-webkit-upload-bug';
 
 interface UploadingFile {
   file: File;
@@ -44,14 +45,6 @@ type FileRemoveCallback = (event: Event, index: number) => void;
   styleUrl: './book-uploader.component.scss'
 })
 export class BookUploaderComponent {
-  @ViewChild(FileUpload) fileUpload!: FileUpload;
-
-  files: UploadingFile[] = [];
-  isUploading = signal(false);
-  uploadCompleted = signal(false);
-  _selectedLibrary: Library | null = null;
-  selectedPath: LibraryPath | null = null;
-
   private readonly libraryService = inject(LibraryService);
   private readonly messageService = inject(MessageService);
   private readonly appSettingsService = inject(AppSettingsService);
@@ -59,6 +52,13 @@ export class BookUploaderComponent {
   private readonly ref = inject(DynamicDialogRef);
   private readonly t = inject(TranslocoService);
   private readonly cdr = inject(ChangeDetectorRef);
+  @ViewChild(FileUpload) fileUpload!: FileUpload;
+
+  files: UploadingFile[] = [];
+  readonly isUploading = signal(false);
+  readonly uploadCompleted = signal(false);
+  _selectedLibrary: Library | null = null;
+  selectedPath: LibraryPath | null = null;
 
   readonly libraries = this.libraryService.libraries;
   maxFileSizeBytes?: number;
@@ -231,9 +231,11 @@ export class BookUploaderComponent {
         uploadUrl = `${API_CONFIG.BASE_URL}/api/v1/files/upload/bookdrop`;
       }
 
-      const req = new HttpRequest('POST', uploadUrl, formData, {
-        reportProgress: true
-      });
+      const req = mitigateWebkitUploadBug(
+        new HttpRequest('POST', uploadUrl, formData, { reportUploadProgress: true, reportDownloadProgress: true })
+      );
+
+      mitigateWebkitUploadBug(req);
 
       this.http.request(req).subscribe({
         next: (event) => {
