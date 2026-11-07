@@ -386,4 +386,70 @@ class CatalogueReconciliationServiceTest {
         assertEquals(List.of(1L,2L),next.groups().getFirst().members().stream().map(CatalogueReconciliationService.Member::bookId).toList());
     }
 
+    private CatalogueReconciliationService.QuickMergeResult quick(List<Long> ids,long target) {
+        return transaction.execute(status->service.quickMerge(1,ids,target));
+    }
+    @Test void quickMergeCommitsAStraightforwardGroupWithItsReceiptAndCompatibleProgress() {
+        jdbc.update("INSERT INTO user_book_progress VALUES(101,2,8,'chapter-4')");
+        var result=quick(List.of(1L,2L),1);
+        assertEquals("MERGED",result.status());assertNotNull(result.receipt());assertNull(result.preview());
+        assertEquals(1,count("book"));assertEquals(1,count("catalogue_reconciliation_audit"));
+        assertEquals(1L,jdbc.queryForObject("SELECT book_id FROM user_book_progress WHERE id=101",Long.class));
+        assertThrows(APIException.class,()->quick(List.of(1L,2L),1));assertEquals(1,count("catalogue_reconciliation_audit"));
+    }
+    @Test void quickMergeHandlesVerifiedIdenticalCopiesAndDifferentFormatsWithoutMandatoryReview() throws Exception {
+        mixedGroup();var result=quick(List.of(1L,2L,3L,4L),1);
+        assertEquals("MERGED",result.status());assertEquals(2,count("book_file"));assertEquals(1,count("catalogue_quarantine"));
+        assertEquals("QUARANTINED",quarantine.entries(result.receipt().id()).getFirst().get("state"));
+    }
+    @Test void quickMergeReturnsAnExpandedPreviewWithoutChangingUnseenRecords() throws Exception {
+        mixedGroup();var result=quick(List.of(1L,2L,4L),1);
+        assertEquals("REVIEW_REQUIRED",result.status());assertNull(result.receipt());assertEquals(4,result.preview().members().size());
+        assertEquals(4,count("book"));assertEquals(0,count("catalogue_quarantine"));assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
+    }
+    @Test void quickMergeRequiresReviewForDifferentEditionsInTheSameFormat() throws Exception {
+        mixedGroup();Files.writeString(folder.resolve("another/shared.pdf"),"A different PDF edition");
+        jdbc.update("UPDATE book_file SET current_hash=? WHERE id=33",org.booklore.service.file.FileFingerprint.generateHash(folder.resolve("another/shared.pdf")));
+        var result=quick(List.of(1L,2L,3L,4L),1);assertEquals("REVIEW_REQUIRED",result.status());
+        assertTrue(result.preview().eligible());assertEquals(0,count("catalogue_reconciliation_audit"));
+    }
+    @Test void quickMergeRequiresReviewForDifferentLockedMetadata() {
+        jdbc.execute("ALTER TABLE book_metadata ADD COLUMN description_locked BOOLEAN DEFAULT false");
+        jdbc.update("UPDATE book_metadata SET description_locked=true WHERE book_id=2");
+        var result=quick(List.of(1L,2L),1);assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().eligible());
+        assertTrue(result.reviewReasons().stream().anyMatch(reason->reason.contains("locked")));assertEquals(2,count("book"));
+        jdbc.update("UPDATE book_metadata SET description_locked=false");jdbc.execute("ALTER TABLE book_metadata ADD COLUMN cover_locked BOOLEAN DEFAULT false");
+        jdbc.update("UPDATE book_metadata SET cover_locked=true WHERE book_id=2");assertEquals("REVIEW_REQUIRED",quick(List.of(1L,2L),1).status());
+    }
+    @Test void quickMergeRequiresReviewForLanguageAndAuthorCreditDifferences() throws Exception {
+        mixedGroup();jdbc.execute("ALTER TABLE book_metadata ADD COLUMN language VARCHAR(20) DEFAULT 'en'");
+        jdbc.update("UPDATE book_metadata SET language='ro' WHERE book_id=4");
+        var result=quick(List.of(1L,2L,3L,4L),1);assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().eligible());
+        assertTrue(result.reviewReasons().stream().anyMatch(reason->reason.contains("language")));
+        jdbc.update("UPDATE book_metadata SET language='en'");jdbc.update("INSERT INTO author VALUES(2,'Additional Narrator')");
+        jdbc.update("INSERT INTO book_metadata_author_mapping VALUES(4,2)");result=quick(List.of(1L,2L,3L,4L),1);
+        assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.reviewReasons().stream().anyMatch(reason->reason.contains("authors")));
+    }
+    @Test void quickMergeNeverBypassesConflictingReadingProgressOrAdministratorChecks() {
+        jdbc.update("INSERT INTO user_book_progress VALUES(101,1,8,'one'),(102,2,8,'two')");
+        var result=quick(List.of(1L,2L),1);assertEquals("REVIEW_REQUIRED",result.status());assertFalse(result.preview().eligible());
+        assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
+        user.getPermissions().setAdmin(false);assertThrows(APIException.class,()->quick(List.of(1L,2L),1));
+    }
+    @Test void quickMergeTreatsSubtitleDifferencesAsAJudgmentCallEvenWhenManualMergeIsAllowed() {
+        jdbc.update("UPDATE book_metadata SET title='The Book: A Subtitle' WHERE book_id=2");
+        var result=quick(List.of(1L,2L),1);assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().eligible());
+        assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
+    }
+
+    @Test void quickMergeRejectsMetadataChangedBetweenDiscoveryAndItsLockedSnapshot() {
+        var changingStore=spy(new CatalogueReconciliationStore(jdbc));
+        doAnswer(call->{jdbc.update("UPDATE book_metadata SET title='A different work' WHERE book_id=2");return call.callRealMethod();})
+                .when(changingStore).snapshot(any(),anyList(),anyList(),eq(true));
+        var changingService=new CatalogueReconciliationService(jdbc,changingStore,new ObjectMapper(),mock(AuditService.class),mock(NotificationService.class),quarantine,
+                mock(org.booklore.service.monitoring.MonitoringRegistrationService.class));
+        assertThrows(APIException.class,()->transaction.execute(status->changingService.quickMerge(1,List.of(1L,2L),1)));
+        assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
+    }
+
 }

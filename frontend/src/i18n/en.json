@@ -3526,7 +3526,7 @@
       "dismiss": "Dismiss",
       "target": "Target",
       "sameFormatWarning": "Same format",
-      "helpText": "Each group contains books that appear to be duplicates. Select the target book (the one to keep), then click Merge to combine files. To delete specific duplicates, check the ones you want to remove and click Delete.",
+      "helpText": "Select the record to keep and click Merge. Straightforward groups merge directly; other groups open for review. Inspect group is available whenever you want to check the details first.",
       "groupLabel": "Group {{ index }}",
       "fileCount": "{{ count }} files",
       "reason": {
@@ -3669,10 +3669,21 @@
       "recoverCopy": "Download recoverable copy",
       "copyUnavailable": "The quarantined copy is unavailable or changed. Check its journal entry before attempting recovery.",
       "noExpiry": "No automatic expiry",
-      "formatsNotice": "Review each group before merging. Distinct formats stay at their current paths; byte-identical copies can be moved to recoverable quarantine.",
+      "formatsNotice": "Merge checks the group automatically. Straightforward groups merge immediately; complex groups open for review. Distinct files stay; verified identical copies use recoverable quarantine.",
       "reviewNext": "Review next group",
       "reviewGroup": "Review and reconcile",
-      "range": "{{first}}–{{last}} of {{total}} groups"
+      "range": "{{first}}–{{last}} of {{total}} groups",
+      "quickMerge": "Merge",
+      "quickMerged": "Group merged",
+      "needsReview": "Review needed",
+      "mergeSimple": "Merge straightforward groups",
+      "batchTitle": "Merge straightforward groups in this list",
+      "batchConfirm": "Check all {{count}} groups in this list and merge the straightforward ones using the selected target records. Leave complex groups for review. Identical copies use recoverable quarantine and the configured retention policy. You can stop after the current group. Keep this window open while the batch runs.",
+      "batchFinished": "Batch finished",
+      "batchSummary": "{{merged}} merged · {{review}} need review · {{failed}} failed",
+      "stopBatch": "Stop after current group",
+      "stopping": "Stopping after current group",
+      "quickKeeps": "Merge keeps record #{{id}}. Inspect the group to choose another record."
     }
   },
   "readerAudiobook": {

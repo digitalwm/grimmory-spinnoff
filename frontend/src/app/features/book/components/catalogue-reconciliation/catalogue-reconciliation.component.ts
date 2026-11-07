@@ -6,7 +6,7 @@ import {Button} from '@openng/optimus-ui/button';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {UserService} from '../../../settings/user-management/user.service';
 import {
-  CatalogueGroup, CataloguePreview, CatalogueReceipt, CatalogueReceiptSummary, CatalogueReconciliationService, CatalogueScan, QuarantinedCopy,
+  CatalogueGroup, CataloguePreview, CatalogueReceipt, CatalogueReceiptSummary, CatalogueReconciliationService, CatalogueScan, QuarantinedCopy, QuickMergeResult,
 } from '../../service/catalogue-reconciliation.service';
 
 @Component({
@@ -18,6 +18,8 @@ import {
 })
 export class CatalogueReconciliationComponent implements OnChanges {
   @Input({required: true}) libraryId!: number;
+  @Input() resolvedBookIds: number[] = [];
+  @Input() reviewAssessment: QuickMergeResult | null = null;
   @Input() reviewGroup: CatalogueGroup | null = null;
   @Output() reconciled = new EventEmitter<CatalogueReceipt>();
   @Output() mergingChange = new EventEmitter<boolean>();
@@ -29,6 +31,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
   readonly isAdmin = computed(() => this.userService.currentUser()?.permissions.admin === true);
   readonly report = signal<CatalogueScan | null>(null);
   readonly inspected = signal<CataloguePreview | null>(null);
+  readonly reviewReasons = signal<string[]>([]);
   readonly lastReceipt = signal<CatalogueReceipt | null>(null);
   readonly quarantined = signal<QuarantinedCopy[]>([]);
   search = '';
@@ -44,9 +47,10 @@ export class CatalogueReconciliationComponent implements OnChanges {
 
   ngOnChanges(changes?: SimpleChanges): void {
     if (changes && !changes['libraryId']) {
-      if (changes['reviewGroup']) {
+      if (changes['resolvedBookIds']) this.pruneReport(this.resolvedBookIds);
+      if (changes['reviewGroup'] || changes['reviewAssessment']) {
         this.generation++; this.busy.set(false); this.confirmed = false; this.inspected.set(null); this.selectedGroup = null;
-        if (this.reviewGroup) this.inspect(this.reviewGroup);
+        if (this.reviewGroup) this.openRequestedReview();
       }
       return;
     }
@@ -59,7 +63,37 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.error.set(null);
     this.history.set([]);
     this.quarantined.set([]);
-    if (this.reviewGroup) this.inspect(this.reviewGroup);
+    if (this.reviewGroup) this.openRequestedReview();
+  }
+
+  private openRequestedReview(): void {
+    if (!this.reviewGroup) return;
+    if (this.reviewAssessment?.preview) this.showAssessment(this.reviewGroup, this.reviewAssessment);
+    else this.inspect(this.reviewGroup);
+  }
+
+  private showAssessment(group: CatalogueGroup, result: QuickMergeResult): void {
+    const preview = result.preview;
+    if (!preview || !this.isAdmin()) return;
+    this.selectedGroup = {...group, members: preview.members}; this.targetBookId = preview.targetBookId;
+    this.inspected.set(preview); this.confirmed = false; this.error.set(null); this.busy.set(false);
+    this.reviewReasons.set(result.reviewReasons.filter(reason => !preview.reasons.includes(reason)));
+    setTimeout(() => this.previewPanel?.nativeElement.focus(), 0);
+  }
+
+  quickMerge(group: CatalogueGroup): void {
+    if (!this.isAdmin() || this.busy() || this.merging()) return;
+    this.merging.set(true); this.mergingChange.emit(true); this.error.set(null);
+    this.service.quickMerge(this.libraryId, group, group.suggestedTargetBookId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: result => {
+        if (result.status === 'MERGED' && result.receipt) this.finishMerge(result.receipt);
+        else {this.merging.set(false); this.mergingChange.emit(false); this.showAssessment(group, result);}
+      },
+      error: err => {
+        this.merging.set(false); this.mergingChange.emit(false); this.confirmed = false; this.inspected.set(null);
+        this.error.set(err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed'));
+      },
+    });
   }
 
   scan(page = 0, navigate = false): void {
@@ -95,6 +129,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.selectedGroup = group;
     this.targetBookId = target;
     this.confirmed = false;
+    this.reviewReasons.set([]);
     this.inspected.set(null);
     this.error.set(null);
     this.busy.set(true);
@@ -121,25 +156,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.mergingChange.emit(true);
     this.error.set(null);
     this.service.merge(preview).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: receipt => {
-        this.lastReceipt.set(receipt);
-        this.reconciled.emit(receipt);
-        this.loadQuarantine(receipt.id);
-        this.confirmed = false;
-        this.inspected.set(null);
-        this.merging.set(false);
-        this.mergingChange.emit(false);
-        const current = this.report();
-        if (current) {
-          const changed = new Set([receipt.targetBookId, ...receipt.removedBookIds]);
-          const groups = current.groups.filter(group => !group.members.some(member => changed.has(member.bookId)));
-          const removed = current.groups.filter(group => !groups.includes(group));
-          this.report.set({...current, groups,
-            totalGroups: Math.max(0, current.totalGroups - removed.length),
-            extraRecords: Math.max(0, current.extraRecords - removed.reduce((sum, group) => sum + group.members.length - 1, 0))});
-        }
-        this.selectedGroup = null;
-      },
+      next: receipt => this.finishMerge(receipt),
       error: err => {
         this.merging.set(false);
         this.mergingChange.emit(false);
@@ -148,6 +165,33 @@ export class CatalogueReconciliationComponent implements OnChanges {
         this.error.set(err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed'));
       },
     });
+  }
+
+  private finishMerge(receipt: CatalogueReceipt): void {
+    this.reviewReasons.set([]);
+
+    this.lastReceipt.set(receipt);
+    this.reconciled.emit(receipt);
+    this.loadQuarantine(receipt.id);
+    this.confirmed = false;
+    this.inspected.set(null);
+    this.merging.set(false);
+    this.mergingChange.emit(false);
+    this.pruneReport([receipt.targetBookId, ...receipt.removedBookIds]);
+    this.selectedGroup = null;
+  }
+
+  private pruneReport(ids: number[]): void {
+    const changed = new Set(ids), preview = this.inspected();
+    if (preview?.members.some(member => changed.has(member.bookId))) {
+      this.inspected.set(null); this.confirmed = false; this.selectedGroup = null;
+    }
+    const current = this.report();
+    if (!current) return;
+    const groups = current.groups.filter(group => !group.members.some(member => changed.has(member.bookId)));
+    const removed = current.groups.filter(group => !groups.includes(group));
+    this.report.set({...current, groups, totalGroups: Math.max(0, current.totalGroups - removed.length),
+      extraRecords: Math.max(0, current.extraRecords - removed.reduce((sum, group) => sum + group.members.length - 1, 0))});
   }
 
   loadHistory(): void {

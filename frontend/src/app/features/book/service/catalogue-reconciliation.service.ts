@@ -57,6 +57,12 @@ export interface CatalogueReceipt {
   fileSha256: string;
   completedAt: string;
 }
+export interface QuickMergeResult {
+  status: 'MERGED' | 'REVIEW_REQUIRED';
+  receipt: CatalogueReceipt | null;
+  preview: CataloguePreview | null;
+  reviewReasons: string[];
+}
 export interface CatalogueReceiptSummary {
   id: string;
   targetBookId: number;
@@ -76,6 +82,11 @@ export class CatalogueReconciliationService {
     return this.http.post<CataloguePreview>(`${this.url}/preview`, {
       libraryId, bookIds: group.members.map(member => member.bookId), targetBookId,
     });
+  }
+  quickMerge(libraryId: number, group: CatalogueGroup, targetBookId: number) {
+    return this.http.post<QuickMergeResult>(`${this.url}/quick-merge`, {
+      libraryId, bookIds: group.members.map(member => member.bookId), targetBookId,
+    }).pipe(tap(result => {if (result.status === 'MERGED') void this.queryClient.invalidateQueries({queryKey: bookQueryKeys.all()});}));
   }
   merge(preview: CataloguePreview) {
     return this.http.post<CatalogueReceipt>(`${this.url}/merge`, {

@@ -46,4 +46,14 @@ describe('CatalogueReconciliationService', () => {
     request.flush({id: 'receipt', targetBookId: 1, removedBookIds: [2], fileSha256: 'verified', completedAt: '2026-11-07T00:00:00Z'});
     expect(invalidate).toHaveBeenCalledWith({queryKey: bookQueryKeys.all()});
   });
+  it('sends one direct-merge request and invalidates books only when the server merged', () => {
+    const invalidate=vi.spyOn(harness.queryClient,'invalidateQueries');
+    service.quickMerge(7,group,1).subscribe();
+    let request=http.expectOne(req=>req.url.endsWith('/quick-merge'));
+    expect(request.request.body).toEqual({libraryId:7,bookIds:[1,2],targetBookId:1});
+    request.flush({status:'REVIEW_REQUIRED',receipt:null,preview,reviewReasons:['Different editions']});expect(invalidate).not.toHaveBeenCalled();
+    service.quickMerge(7,group,1).subscribe();request=http.expectOne(req=>req.url.endsWith('/quick-merge'));
+    request.flush({status:'MERGED',receipt:{id:'receipt'},preview:null,reviewReasons:[]});expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
 });

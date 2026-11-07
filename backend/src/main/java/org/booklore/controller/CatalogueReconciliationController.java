@@ -34,6 +34,11 @@ public class CatalogueReconciliationController {
     public ResponseEntity<CatalogueReconciliationService.Preview> preview(@RequestBody @Valid InspectRequest request) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.preview(request.libraryId, request.bookIds, request.targetBookId));
     }
+    @PostMapping("/quick-merge")
+    public ResponseEntity<CatalogueReconciliationService.QuickMergeResult> quickMerge(@RequestBody @Valid InspectRequest request) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.quickMerge(request.libraryId, request.bookIds, request.targetBookId));
+    }
+
     @PostMapping("/merge")
     public ResponseEntity<CatalogueReconciliationService.Receipt> merge(@RequestBody @Valid MergeRequest request) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.merge(request.libraryId, request.bookIds,

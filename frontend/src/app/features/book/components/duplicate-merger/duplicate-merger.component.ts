@@ -8,7 +8,7 @@ import {SelectButton} from '@openng/optimus-ui/selectbutton';
 import {ProgressBar} from '@openng/optimus-ui/progressbar';
 import {Tag} from '@openng/optimus-ui/tag';
 import {Paginator, PaginatorState} from '@openng/optimus-ui/paginator';
-import {Subject, takeUntil} from 'rxjs';
+import {lastValueFrom, Subject, takeUntil} from 'rxjs';
 import {BookFileService} from '../../service/book-file.service';
 import {BookService} from '../../service/book.service';
 import {Book, DuplicateDetectionRequest, DuplicateGroup} from '../../model/book.model';
@@ -17,7 +17,7 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
 import {CoverComponent} from '../../../../shared/components/cover/cover.component';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {AppSettingsService} from '../../../../shared/service/app-settings.service';
-import {CatalogueGroup, CatalogueReceipt} from '../../service/catalogue-reconciliation.service';
+import {CatalogueGroup, CatalogueReceipt, CatalogueReconciliationService, QuickMergeResult} from '../../service/catalogue-reconciliation.service';
 import {CatalogueReconciliationComponent} from '../catalogue-reconciliation/catalogue-reconciliation.component';
 
 type PresetMode = 'strict' | 'balanced' | 'aggressive' | 'custom';
@@ -26,6 +26,8 @@ interface DisplayGroup extends DuplicateGroup {
   selectedTargetBookId: number;
   dismissed: boolean;
   selectedForDeletion: Set<number>;
+  reviewAssessment?: QuickMergeResult;
+  error?: string;
 }
 
 @Component({
@@ -45,10 +47,13 @@ interface DisplayGroup extends DuplicateGroup {
     CoverComponent,
     CatalogueReconciliationComponent,
   ],
+  providers: [CatalogueReconciliationService],
   templateUrl: './duplicate-merger.component.html',
   styleUrls: ['./duplicate-merger.component.scss']
 })
 export class DuplicateMergerComponent implements OnInit, OnDestroy {
+  private readonly reconciliation = inject(CatalogueReconciliationService);
+  private disposed = false;
   private readonly bookFileService = inject(BookFileService);
   private readonly bookService = inject(BookService);
   private readonly messageService = inject(MessageService);
@@ -63,6 +68,10 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   mode: 'formats' | 'catalogue' = 'formats';
   catalogueMerging = false;
   reviewedGroup: CatalogueGroup | null = null;
+  reviewAssessment: QuickMergeResult | null = null;
+  resolvedBookIds: number[] = [];
+  readonly stopRequested = signal(false);
+  readonly batchRunning = signal(false);
   reviewedGroupFinished = false;
   presetMode: PresetMode = 'balanced';
   showAdvanced = false;
@@ -106,6 +115,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.disposed = true; this.stopRequested.set(true);
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -273,6 +283,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   }
 
   onTargetChange(group: DisplayGroup): void {
+    group.reviewAssessment = undefined; group.error = undefined;
     group.selectedForDeletion.delete(group.selectedTargetBookId);
   }
 
@@ -295,8 +306,31 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
     }
   }
 
-  mergeGroup(group: DisplayGroup): void {
+  private catalogueGroup(group: DisplayGroup): CatalogueGroup {
+    return {key: group.books.map(book => book.id).sort((a,b) => a-b).join('-'), path: this.getBookFilePath(group.books[0]),
+      suggestedTargetBookId: group.selectedTargetBookId,
+      members: group.books.map(book => ({bookId:book.id,fileId:0,title:book.metadata?.title || '',authors:[],storedHash:null}))};
+  }
+
+  async mergeGroup(group: DisplayGroup): Promise<void> {
+    if (this.isMerging() || this.catalogueMerging || this.disposed) return;
+    if (group.reviewAssessment || group.error) {this.reviewGroup(group); return;}
+    this.isMerging.set(true);
+    try {
+      const result = await lastValueFrom(this.reconciliation.quickMerge(this.libraryId, this.catalogueGroup(group), group.selectedTargetBookId).pipe(takeUntil(this.destroy$)));
+      if (result.status === 'MERGED' && result.receipt) {
+        this.onReconciled(result.receipt);
+        this.messageService.add({severity:'success',summary:this.t.translate('book.catalogueReconciliation.quickMerged'),detail:this.t.translate('book.catalogueReconciliation.receipt',{id:result.receipt.id})});
+      } else {group.reviewAssessment = result; this.reviewGroup(group);}
+    } catch (err: any) {
+      group.error = err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed');
+      this.messageService.add({severity:'error',summary:this.t.translate('book.catalogueReconciliation.operationFailed'),detail:group.error});
+    } finally {this.isMerging.set(false);}
+  }
+
+  reviewGroup(group: DisplayGroup): void {
     this.reviewedGroupFinished = false;
+    this.reviewAssessment = group.reviewAssessment ?? null;
     this.reviewedGroup = {
       key: group.books.map(book => book.id).sort((a, b) => a - b).join('-'),
       path: this.getBookFilePath(group.books[0]),
@@ -306,14 +340,55 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
     this.mode = 'catalogue';
   }
 
+  reviewNextGroup(): void {
+    const first = this.activeGroups.find(group => group.reviewAssessment || group.error) ?? this.pagedGroups[0] ?? this.activeGroups[0];
+    if (first) this.reviewGroup(first);
+  }
+
   mergeAll(): void {
-    // Every group now has a verified plan and a separate explicit confirmation.
-    const first = this.pagedGroups[0] ?? this.activeGroups[0];
-    if (first) this.mergeGroup(first);
+    if (this.isMerging() || this.catalogueMerging || !this.activeGroups.length) return;
+    const queue = [...this.activeGroups];
+    this.confirmationService.confirm({
+      header:this.t.translate('book.catalogueReconciliation.batchTitle'),
+      message:this.t.translate('book.catalogueReconciliation.batchConfirm',{count:queue.length}),
+      acceptLabel:this.t.translate('book.catalogueReconciliation.mergeSimple'),rejectLabel:this.t.translate('common.no'),
+      accept:() => {void this.runBatch(queue);},
+    });
+  }
+
+  stopBatch(): void {this.stopRequested.set(true);}
+
+  private async runBatch(queue: DisplayGroup[]): Promise<void> {
+    if (this.isMerging() || this.disposed) return;
+    this.isMerging.set(true); this.batchRunning.set(true); this.stopRequested.set(false);
+    this.mergeTotal.set(queue.length); this.mergeProgress.set(0);
+    let merged=0,review=0,failed=0;
+    try {
+      for (const group of queue) {
+        if (this.stopRequested() || this.disposed) break;
+        if (!group.dismissed) {
+          if (group.reviewAssessment || group.error) review++;
+          else try {
+            const result=await lastValueFrom(this.reconciliation.quickMerge(this.libraryId,this.catalogueGroup(group),group.selectedTargetBookId).pipe(takeUntil(this.destroy$)));
+            if (result.status === 'MERGED' && result.receipt) {this.onReconciled(result.receipt);merged++;}
+            else {group.reviewAssessment=result;review++;}
+          } catch (err: any) {
+            group.error=err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed');failed++;
+            if (!err?.status || err.status>=500 || err.status===401 || err.status===403) this.stopRequested.set(true);
+          }
+        }
+        this.mergeProgress.update(value=>value+1);
+      }
+    } finally {
+      this.batchRunning.set(false); this.isMerging.set(false);
+      if (!this.disposed) this.messageService.add({severity:failed?'warn':'success',summary:this.t.translate('book.catalogueReconciliation.batchFinished'),
+        detail:this.t.translate('book.catalogueReconciliation.batchSummary',{merged,review,failed})});
+    }
   }
 
   onReconciled(receipt: CatalogueReceipt): void {
     this.reviewedGroupFinished = true;
+    this.resolvedBookIds = [...new Set([...this.resolvedBookIds, receipt.targetBookId, ...receipt.removedBookIds])];
     const changed = new Set([receipt.targetBookId, ...receipt.removedBookIds]);
     for (const group of this.groups) {
       if (group.books.some(book => changed.has(book.id))) group.dismissed = true;
@@ -350,7 +425,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   }
 
   closeDialog(): void {
-    if (this.catalogueMerging) return;
+    if (this.catalogueMerging || this.isMerging()) return;
     this.dialogRef.close();
   }
 }

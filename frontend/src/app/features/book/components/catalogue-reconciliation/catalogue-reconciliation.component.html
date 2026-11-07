@@ -55,6 +55,8 @@
             <h4>{{ group.members[0].title || t('untitled') }}</h4>
             <p class="file-path">{{ group.path }}</p>
             <p>{{ t('groupRecords', {count: group.members.length}) }}</p>
+            <p>{{ t('quickKeeps', {id: group.suggestedTargetBookId}) }}</p>
+            <p-button [label]="t('quickMerge')" icon="pi pi-check" severity="success" (click)="quickMerge(group)" [disabled]="busy() || merging()" />
             <p-button [label]="t('inspect')" icon="pi pi-eye" severity="secondary" (click)="inspect(group)" [disabled]="busy() || merging()" />
           </article>
         }
@@ -70,6 +72,11 @@
     @if (inspected(); as preview) {
       <section #previewPanel class="preview" tabindex="-1" [attr.aria-label]="t('preview')">
         <h3>{{ t('preview') }}</h3>
+        @if (reviewReasons().length) {
+          <div class="review-required" role="status"><strong>{{ t('needsReview') }}</strong>
+            <ul>@for (reason of reviewReasons(); track reason) {<li>{{ reason }}</li>}</ul>
+          </div>
+        }
         <p class="file-path">{{ preview.path }}</p>
         @if (preview.fileSha256) {
           <p>{{ t('verifiedFile', {bytes: preview.fileBytes}) }}</p>

@@ -28,9 +28,25 @@ records have not been subjected to bulk duplicate or metadata cleanup.
 
 Open a library's menu, then **Manage library → Find duplicates → Catalogue duplicates**.
 Administrators can search titles/filenames, scan duplicate candidates, inspect a
-complete group, choose the surviving record, and explicitly confirm its file plan.
-The formats view's **Review and reconcile** action opens the same preview directly;
-there is no automatic bulk merge. Scanning and previewing are read-only.
+complete group, choose the surviving record, and merge straightforward groups directly from the list. **Merge** runs the
+checks and commits a straightforward group in one operation; it opens the detailed
+preview only when a judgment call is needed. **Inspect group** remains available
+for manual review at any time. Scanning and previewing are read-only.
+
+**Merge straightforward groups** checks the entire scanned list after one batch
+confirmation. It processes one group at a time, leaves complex groups for review,
+and can stop after the current operation. Keep the window open during the batch.
+Transport/authorization/server failures stop the batch without automatically retrying
+an uncertain operation. Every committed group retains its own receipt and journal.
+
+Direct merging requires matching normalized full titles and author credits, no
+unseen expanded members, at most one distinct file per format, and no conflicting
+language/series or different locked source metadata. The existing eligibility
+checks still apply. Different editions, ambiguous identities, expanded groups,
+locked metadata decisions, and conflicting reading data go to review without
+being modified. Direct and reviewed merging share the same transaction, file
+verification, quarantine, rollback, and receipt implementation. Discovery values
+are compared with locked snapshots before a direct merge can proceed.
 Completed groups are removed from the existing review list without rescanning it;
 remaining groups, selections, and tab/page state stay available. **Review next group**
 continues through that list. Catalogue pagination uses the remaining row offset so

@@ -54,6 +54,7 @@ public class CatalogueReconciliationService {
                            String action, long retainedFileId, String retainedPath) {}
     public record Receipt(String id, long targetBookId, List<Long> removedBookIds, String fileSha256, Instant completedAt,
                           List<FilePlan> files, int quarantineRetentionDays) {}
+    public record QuickMergeResult(String status, Receipt receipt, Preview preview, List<String> reviewReasons) {}
     public record ReceiptSummary(String id, long targetBookId, String completedAt) {}
     private record FileRow(long bookId, long fileId, long pathId, String root, String subPath, String name,
                            String title, String storedHash, double score, boolean physical, boolean deleted,
@@ -126,6 +127,54 @@ public class CatalogueReconciliationService {
         if (store.rows("book", "id", ids, true).size() != ids.size())
             throw ApiError.CONFLICT.createException("Book records changed. Scan again.");
         Inspection inspection = inspect(libraryId, ids, targetBookId, true);
+        return applyInspection(actor, libraryId, ids, targetBookId, inspection, previewToken);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public QuickMergeResult quickMerge(long libraryId, List<Long> bookIds, long targetBookId) {
+        BookLoreUser actor = requireAdmin();
+        quarantine.lock();
+        List<Long> ids = validateIds(bookIds, targetBookId);
+        if (store.rows("book", "id", ids, true).size() != ids.size()) throw ApiError.CONFLICT.createException("Book records changed. Refresh this group before merging.");
+        Inspection inspection = inspect(libraryId, ids, targetBookId, true);
+        List<String> reasons = quickReviewReasons(inspection, ids);
+        if (!reasons.isEmpty()) return new QuickMergeResult("REVIEW_REQUIRED", null, inspection.preview, reasons);
+        Receipt receipt = applyInspection(actor, libraryId, ids, targetBookId, inspection, inspection.preview.token);
+        return new QuickMergeResult("MERGED", receipt, null, List.of());
+    }
+
+    private List<String> quickReviewReasons(Inspection inspection, List<Long> requested) {
+        Preview preview = inspection.preview;
+        List<String> reasons = new ArrayList<>(preview.reasons);
+        if (!new HashSet<>(requested).equals(new HashSet<>(preview.members.stream().map(Member::bookId).toList())))
+            reasons.add("Additional matching records were found outside the selected group.");
+        if (preview.members.stream().map(member -> normalise(member.title)).distinct().count() != 1)
+            reasons.add("The full titles differ; confirm the intended work before merging.");
+        if (preview.members.stream().map(member -> member.authors.stream().map(CatalogueReconciliationService::normalise)
+                .sorted().distinct().toList()).distinct().count() != 1)
+            reasons.add("The credited authors differ; review the identity of these records.");
+        Map<String, Long> retainedFormats = preview.files.stream().filter(file -> file.action.equals("KEEP"))
+                .collect(java.util.stream.Collectors.groupingBy(FilePlan::bookType, java.util.stream.Collectors.counting()));
+        if (retainedFormats.values().stream().anyMatch(count -> count > 1)) reasons.add("Different editions or file contents exist in the same format.");
+        for (String field : List.of("language", "series_name", "series_number")) {
+            var values = preview.metadataDifferences.getOrDefault(field, Map.of()).values().stream()
+                    .filter(value -> value != null && !value.isBlank()).map(CatalogueReconciliationService::normalise).distinct().toList();
+            if (values.size() > 1) reasons.add("Conflicting " + field.replace('_', ' ') + " metadata needs review.");
+        }
+        List<Map<String, String>> metadata = inspection.before.getOrDefault("book_metadata", List.of());
+        Map<String, String> target = metadata.stream().filter(row -> Long.toString(preview.targetBookId).equals(row.get("book_id"))).findFirst().orElse(Map.of());
+        for (var source : metadata) if (!Long.toString(preview.targetBookId).equals(source.get("book_id"))) {
+            for (var column : source.entrySet()) if (column.getKey().endsWith("_locked") && ("1".equals(column.getValue()) || "true".equalsIgnoreCase(column.getValue()))) {
+                String field = column.getKey().substring(0, column.getKey().length() - 7);
+                if (!source.containsKey(field) || !Objects.equals(source.get(field), target.get(field))) reasons.add("A source record contains locked metadata that needs review.");
+            }
+        }
+        if (!preview.eligible && reasons.isEmpty()) reasons.add("This group needs manual review.");
+        return reasons.stream().distinct().toList();
+    }
+
+    private Receipt applyInspection(BookLoreUser actor, long libraryId, List<Long> ids, long targetBookId,
+                                    Inspection inspection, String previewToken) {
         Preview current = inspection.preview;
         if (!current.eligible || !MessageDigest.isEqual(current.token.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 previewToken.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
@@ -242,6 +291,23 @@ public class CatalogueReconciliationService {
         if (lock && store.rows("book", "id", ids, true).size() != ids.size()) throw ApiError.CONFLICT.createException("The connected group changed.");
         CatalogueReconciliationStore.Schema schema = store.schema();
         Map<String, List<Map<String, String>>> before = store.snapshot(schema, ids, files.stream().map(FileRow::fileId).toList(), lock);
+        List<Map<String, String>> roots = store.rows("library_path", "id", files.stream().map(FileRow::pathId).distinct().toList(), lock);
+        before.put("library_path", roots);
+        // Discovery precedes the locks. Never base a direct merge on values changed during that gap.
+        for (FileRow file : files) {
+            var book = before.get("book").stream().filter(row -> Long.toString(file.bookId).equals(row.get("id"))).findFirst().orElseThrow();
+            var stored = before.get("book_file").stream().filter(row -> Long.toString(file.fileId).equals(row.get("id"))).findFirst().orElseThrow();
+            var metadata = before.getOrDefault("book_metadata", List.of()).stream().filter(row -> Long.toString(file.bookId).equals(row.get("book_id"))).findFirst().orElse(Map.of());
+            var root = roots.stream().filter(row -> Long.toString(file.pathId).equals(row.get("id"))).findFirst().orElse(Map.of());
+            if (!Long.toString(libraryId).equals(book.get("library_id")) || !Long.toString(file.pathId).equals(book.get("library_path_id"))
+                    || !Objects.equals(file.root, root.get("path")) || !Objects.equals(file.title, metadata.get("title"))
+                    || !Long.toString(file.bookId).equals(stored.get("book_id")) || !Objects.equals(file.storedHash, stored.get("current_hash"))
+                    || !Objects.equals(file.name, stored.get("file_name")) || !Objects.equals(file.subPath, stored.get("file_sub_path"))
+                    || !Objects.equals(file.bookType, stored.get("book_type"))
+                    || file.physical != storedBoolean(book.get("is_physical")) || file.deleted != storedBoolean(book.get("deleted"))
+                    || file.bookFormat != storedBoolean(stored.get("is_book")) || file.folderBased != storedBoolean(stored.get("is_folder_based")))
+                throw ApiError.CONFLICT.createException("The group changed during its checks. Retry after the records are stable.");
+        }
         List<String> reasons = new ArrayList<>();
         if (schema.tables().containsKey("kobo_reading_state") && jdbc.queryForObject("SELECT COUNT(*) FROM kobo_reading_state", Long.class) > 0)
             reasons.add("Device reading state exists. Device identity reconciliation requires separate review.");
@@ -366,6 +432,8 @@ public class CatalogueReconciliationService {
                 .filter(name -> !name.isBlank()).distinct().sorted().toList();
         return title.isBlank() || names.isEmpty() ? "unique-" + file.bookId : title + "\n" + String.join("\n", names);
     }
+
+    private static boolean storedBoolean(String value) {return "1".equals(value) || "true".equalsIgnoreCase(value);}
 
     private static String normalise(String value) {return value == null ? "" : java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKD)
             .replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]+", " ").trim();}

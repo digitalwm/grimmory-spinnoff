@@ -3,7 +3,7 @@ import {TestBed} from '@angular/core/testing';
 import {DynamicDialogConfig, DynamicDialogRef} from '@openng/optimus-ui/dynamicdialog';
 import {ConfirmationService, MessageService} from '@openng/optimus-ui/api';
 import {TranslocoService} from '@jsverse/transloco';
-import {of} from 'rxjs';
+import {of, Subject, throwError} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {Book, DuplicateGroup} from '../../model/book.model';
@@ -11,6 +11,7 @@ import {AppSettingsService} from '../../../../shared/service/app-settings.servic
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {BookFileService} from '../../service/book-file.service';
 import {BookService} from '../../service/book.service';
+import {CatalogueReconciliationService, QuickMergeResult} from '../../service/catalogue-reconciliation.service';
 import {DuplicateMergerComponent} from './duplicate-merger.component';
 
 const createBook = (id: number): Book => ({id, libraryId: 1, libraryName: 'Main Library'});
@@ -25,6 +26,7 @@ describe('DuplicateMergerComponent', () => {
   const changeDetectorRef = {markForCheck: vi.fn()};
   const dialogConfig = {data: {libraryId: 1}};
   const bookFileService = {findDuplicates: vi.fn()};
+  const reconciliation = {quickMerge: vi.fn()};
   const bookService = {deleteBooks: vi.fn()};
   const confirmationService = {confirm: vi.fn()};
   const messageService = {add: vi.fn()};
@@ -35,7 +37,7 @@ describe('DuplicateMergerComponent', () => {
   let component: DuplicateMergerComponent;
 
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.restoreAllMocks(); vi.clearAllMocks(); reconciliation.quickMerge.mockReset();
     appSettingsService.appSettings.set(null);
 
     TestBed.resetTestingModule();
@@ -44,6 +46,7 @@ describe('DuplicateMergerComponent', () => {
         {provide: ChangeDetectorRef, useValue: changeDetectorRef},
         {provide: DynamicDialogConfig, useValue: dialogConfig},
         {provide: DynamicDialogRef, useValue: {close: vi.fn()}},
+        {provide: CatalogueReconciliationService, useValue: reconciliation},
         {provide: BookFileService, useValue: bookFileService},
         {provide: BookService, useValue: bookService},
         {provide: ConfirmationService, useValue: confirmationService},
@@ -85,7 +88,7 @@ describe('DuplicateMergerComponent', () => {
   it('routes a mixed group to one reviewed preview without attaching or deleting anything', () => {
     component.ngOnInit(); const group = {...createGroup([createBook(1),createBook(2),createBook(3)]),
       selectedTargetBookId: 2,dismissed: false,selectedForDeletion:new Set<number>()};
-    component.mergeGroup(group);
+    component.reviewGroup(group);
     expect(component.mode).toBe('catalogue'); expect(component.reviewedGroup?.suggestedTargetBookId).toBe(2);
     expect(component.reviewedGroup?.members.map(member=>member.bookId)).toEqual([1,2,3]);
     expect(group.dismissed).toBe(false);
@@ -93,7 +96,7 @@ describe('DuplicateMergerComponent', () => {
   it('reviews the next group without performing an automatic bulk merge', () => {
     component.ngOnInit(); component.groups=[{...createGroup([createBook(1),createBook(2)]),
       selectedTargetBookId:1,dismissed:false,selectedForDeletion:new Set<number>()}];
-    component.mergeAll(); expect(component.mode).toBe('catalogue'); expect(component.reviewedGroup?.members.length).toBe(2);
+    component.reviewNextGroup(); expect(component.mode).toBe('catalogue'); expect(component.reviewedGroup?.members.length).toBe(2);
     expect(component.groups[0].dismissed).toBe(false);
   });
 
@@ -110,8 +113,43 @@ describe('DuplicateMergerComponent', () => {
     component.ngOnInit();component.groups=[1,3,5].map(id=>({...createGroup([createBook(id),createBook(id+1)]),selectedTargetBookId:id,dismissed:false,selectedForDeletion:new Set<number>()}));
     component.pageSize=1;component.pageFirst=1;
     component.onReconciled({id:'receipt',targetBookId:3,removedBookIds:[4],fileSha256:'verified',completedAt:'now'});
-    component.mergeAll();expect(component.reviewedGroup?.members.map(member=>member.bookId)).toEqual([5,6]);
+    component.reviewNextGroup();expect(component.reviewedGroup?.members.map(member=>member.bookId)).toEqual([5,6]);
     expect(component.pageFirst).toBe(1);
+  });
+
+  const receipt={id:'receipt',targetBookId:1,removedBookIds:[2],fileSha256:'verified',completedAt:'now'};
+  const merged:QuickMergeResult={status:'MERGED',receipt,preview:null,reviewReasons:[]};
+  const review:QuickMergeResult={status:'REVIEW_REQUIRED',receipt:null,preview:null,reviewReasons:['Different editions']};
+  const display=(id:number)=>({...createGroup([createBook(id),createBook(id+1)]),selectedTargetBookId:id,dismissed:false,selectedForDeletion:new Set<number>()});
+  it('merges a straightforward group directly from the list without a review checkbox or dialog', async () => {
+    component.ngOnInit();const group=display(1);component.groups=[group];component.hasScanned.set(true);
+    reconciliation.quickMerge.mockReturnValue(of(merged));await component.mergeGroup(group);
+    expect(group.dismissed).toBe(true);expect(component.mode).toBe('formats');expect(confirmationService.confirm).not.toHaveBeenCalled();
+    expect(component.hasScanned()).toBe(true);expect(bookFileService.findDuplicates).not.toHaveBeenCalled();
+  });
+  it('opens the server-provided assessment only when the group needs review', async () => {
+    component.ngOnInit();const group=display(1);component.groups=[group];reconciliation.quickMerge.mockReturnValue(of(review));
+    await component.mergeGroup(group);expect(component.mode).toBe('catalogue');expect(component.reviewAssessment).toBe(review);expect(group.dismissed).toBe(false);
+  });
+  it('checks a whole list after one batch confirmation and leaves complex groups for review', async () => {
+    component.ngOnInit();component.groups=[display(1),display(3)];component.hasScanned.set(true);
+    reconciliation.quickMerge.mockReturnValueOnce(of(merged)).mockReturnValueOnce(of(review));
+    confirmationService.confirm.mockImplementation(config=>config.accept());component.mergeAll();
+    await vi.waitFor(()=>expect(component.isMerging()).toBe(false));
+    expect(confirmationService.confirm).toHaveBeenCalledTimes(1);expect(reconciliation.quickMerge).toHaveBeenCalledTimes(2);
+    expect(component.groups[0].dismissed).toBe(true);expect(component.groups[1].dismissed).toBe(false);expect(component.groups[1].reviewAssessment).toBe(review);
+    expect(component.mode).toBe('formats');expect(bookFileService.findDuplicates).not.toHaveBeenCalled();
+  });
+  it('stops a batch after the in-flight group and retains the other groups', async () => {
+    component.ngOnInit();component.groups=[display(1),display(3)];const pending=new Subject<QuickMergeResult>();
+    reconciliation.quickMerge.mockReturnValue(pending);confirmationService.confirm.mockImplementation(config=>config.accept());component.mergeAll();
+    component.stopBatch();pending.next(merged);pending.complete();await vi.waitFor(()=>expect(component.isMerging()).toBe(false));
+    expect(reconciliation.quickMerge).toHaveBeenCalledTimes(1);expect(component.groups[0].dismissed).toBe(true);expect(component.groups[1].dismissed).toBe(false);
+  });
+  it('stops on an uncertain network failure and never retries the group automatically', async () => {
+    component.ngOnInit();component.groups=[display(1),display(3)];reconciliation.quickMerge.mockReturnValue(throwError(()=>({status:0})));
+    confirmationService.confirm.mockImplementation(config=>config.accept());component.mergeAll();await vi.waitFor(()=>expect(component.isMerging()).toBe(false));
+    expect(reconciliation.quickMerge).toHaveBeenCalledTimes(1);expect(component.activeGroups).toHaveLength(2);
   });
 
 });

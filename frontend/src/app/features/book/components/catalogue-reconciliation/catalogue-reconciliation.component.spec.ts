@@ -9,7 +9,7 @@ import {CatalogueReconciliationComponent} from './catalogue-reconciliation.compo
 
 describe('CatalogueReconciliationComponent', () => {
   const user = signal({permissions: {admin: true}});
-  const api = {scan: vi.fn(), preview: vi.fn(), merge: vi.fn(), receipt: vi.fn(), receipts: vi.fn(), quarantinedFile: vi.fn()};
+  const api = {scan: vi.fn(), preview: vi.fn(), merge: vi.fn(), receipt: vi.fn(), receipts: vi.fn(), quarantinedFile: vi.fn(), quickMerge: vi.fn()};
   const group: CatalogueGroup = {key: 'shared', path: '/books/shared.epub', suggestedTargetBookId: 1,
     members: [{bookId: 1, fileId: 11, title: 'Book', authors: ['Ada'], storedHash: 'same'},
       {bookId: 2, fileId: 22, title: 'Book', authors: ['Ada'], storedHash: 'same'}]};
@@ -108,6 +108,24 @@ describe('CatalogueReconciliationComponent', () => {
     component.scan();component.inspect(group);component.confirmed=true;component.merge();
     expect(component.report()?.groups).toHaveLength(19);expect(api.scan).toHaveBeenCalledTimes(1);
     component.scan(1,true);expect(api.scan).toHaveBeenLastCalledWith(7,1,'',19);
+  });
+
+  it('merges a straightforward catalogue group with one click and no confirmation checkbox', () => {
+    api.quickMerge.mockReturnValue(of({status:'MERGED',receipt:{id:'receipt',targetBookId:1,removedBookIds:[2],fileSha256:'verified',completedAt:'now'},preview:null,reviewReasons:[]}));
+    component.scan();component.quickMerge(group);
+    expect(component.confirmed).toBe(false);expect(component.inspected()).toBeNull();expect(component.report()?.groups).toHaveLength(0);
+    expect(api.preview).not.toHaveBeenCalled();expect(api.merge).not.toHaveBeenCalled();expect(api.scan).toHaveBeenCalledTimes(1);
+  });
+  it('opens a complex quick-merge assessment without requesting another preview or merging', () => {
+    api.quickMerge.mockReturnValue(of({status:'REVIEW_REQUIRED',receipt:null,preview,reviewReasons:['Different editions']}));
+    component.quickMerge(group);expect(component.inspected()).toBe(preview);expect(component.confirmed).toBe(false);
+    expect(api.preview).not.toHaveBeenCalled();expect(api.merge).not.toHaveBeenCalled();
+  });
+  it('uses a parent assessment directly and prunes groups resolved in the other view', () => {
+    component.scan();component.reviewGroup=group;component.reviewAssessment={status:'REVIEW_REQUIRED',receipt:null,preview,reviewReasons:['Different editions']};
+    component.ngOnChanges({reviewGroup:new SimpleChange(null,group,false)});expect(api.preview).not.toHaveBeenCalled();
+    component.resolvedBookIds=[1,2];component.ngOnChanges({resolvedBookIds:new SimpleChange([],component.resolvedBookIds,false)});
+    expect(component.report()?.groups).toHaveLength(0);expect(component.inspected()).toBeNull();expect(api.scan).toHaveBeenCalledTimes(1);
   });
 
 });
