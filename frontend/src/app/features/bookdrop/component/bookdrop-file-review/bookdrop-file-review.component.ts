@@ -300,12 +300,16 @@ export class BookdropFileReviewComponent implements OnInit {
     });
   }
 
+  get hasCopyableMetadata(): boolean {
+    return this.getSelectedFiles().some(row => !row.file.metadataMatchRejected && !!row.file.fetchedMetadata?.title);
+  }
+
   copyMetadata(): void {
     this.getSelectedFiles().forEach(fileUi => {
       const cachedfUi = this.fileUiCache[fileUi.file.id];
       const fetched = cachedfUi.file.fetchedMetadata;
       const form = cachedfUi.metadataForm;
-      if (!fetched) return;
+      if (!fetched || cachedfUi.file.metadataMatchRejected) return;
       for (const key of Object.keys(fetched)) {
         if (!this.includeCoversOnCopy && key === 'thumbnailUrl') continue;
         const value = fetched[key as keyof typeof fetched];

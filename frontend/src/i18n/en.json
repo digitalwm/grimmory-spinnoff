@@ -1989,6 +1989,7 @@
       "fetchedCoverTitle": "Fetched cover",
       "noCoverFetchedTitle": "No cover fetched",
       "metadataAppliedTooltip": "Fetched metadata has been applied.",
+      "metadataRejectedTooltip": "Fetched match rejected: the title or author does not match this file. Original metadata will be used.",
       "noMetadataTooltip": "No fetched metadata available. Original metadata will be used.",
       "metadataNotAppliedTooltip": "Fetched metadata hasn't been applied yet. Open metadata picker to review.",
       "hideMetadataTooltip": "Hide metadata",

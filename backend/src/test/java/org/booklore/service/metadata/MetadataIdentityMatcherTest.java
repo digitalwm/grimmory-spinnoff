@@ -12,6 +12,10 @@ class MetadataIdentityMatcherTest {
         return BookMetadata.builder().title(title).authors(author == null ? List.of() : List.of(author)).build();
     }
 
+    @Test void rejectsEverFallenSubstringCollisionWithAnUnrelatedAuthor() {
+        assertFalse(MetadataIdentityMatcher.matches(book("Ever Fallen", "Elle Scott"),
+                book("Never Have I Ever Fallen for a Movie Star", "Juliet Bardsley")));
+    }
     @Test void rejectsFateOnFireSeriesCollision() {
         BookMetadata wrong = book("Feudlings", "Wendy Knight");
         wrong.setSeriesName("Fate on Fire");

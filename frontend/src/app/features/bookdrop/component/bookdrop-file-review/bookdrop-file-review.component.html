@@ -49,7 +49,7 @@
                 severity="info"
                 [label]="t('importMetadata')"
                 icon="pi pi-copy"
-                [disabled]="!hasSelectedFiles"
+                [disabled]="!hasCopyableMetadata"
                 (click)="copyMetadata()"
                 [pTooltip]="t('importMetadataTooltip')"
                 tooltipPosition="top" />
@@ -176,11 +176,11 @@
                 <i
                   class="pi metadata-status"
                   [ngClass]="{
-                    'pi-check-circle copied': copiedFlags[file.file.id],
-                    'pi-check-circle no-metadata': !file.file.fetchedMetadata,
-                    'pi-exclamation-triangle not-applied': file.file.fetchedMetadata && !copiedFlags[file.file.id]
+                    'pi-check-circle copied': copiedFlags[file.file.id] && !file.file.metadataMatchRejected,
+                    'pi-check-circle no-metadata': !file.file.fetchedMetadata && !file.file.metadataMatchRejected,
+                    'pi-exclamation-triangle not-applied': file.file.metadataMatchRejected || (file.file.fetchedMetadata && !copiedFlags[file.file.id])
                   }"
-                  [pTooltip]="copiedFlags[file.file.id]
+                  [pTooltip]="file.file.metadataMatchRejected ? t('metadataRejectedTooltip') : copiedFlags[file.file.id]
                     ? t('metadataAppliedTooltip')
                     : (!file.file.fetchedMetadata || !file.file.fetchedMetadata.title)
                       ? t('noMetadataTooltip')
@@ -223,6 +223,9 @@
               </div>
             </div>
 
+            @if (file.file.metadataMatchRejected) {
+              <p class="metadata-rejection" role="alert">{{ file.file.metadataMatchMessage || t('metadataRejectedTooltip') }}</p>
+            }
             @if (file.showDetails) {
               <app-bookdrop-file-metadata-picker-component
                 class="details-section"

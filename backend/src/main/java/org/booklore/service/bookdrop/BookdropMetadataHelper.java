@@ -3,6 +3,7 @@ package org.booklore.service.bookdrop;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.booklore.model.dto.BookMetadata;
+import org.booklore.service.metadata.MetadataIdentityMatcher;
 import org.booklore.model.entity.BookdropFileEntity;
 import org.booklore.repository.BookdropFileRepository;
 import org.springframework.stereotype.Component;
@@ -33,10 +34,16 @@ public class BookdropMetadataHelper {
 
     public BookMetadata getCurrentMetadata(BookdropFileEntity file) {
         try {
+            BookMetadata original = file.getOriginalMetadata() == null || file.getOriginalMetadata().isBlank()
+                    ? null : objectMapper.readValue(file.getOriginalMetadata(), BookMetadata.class);
             String fetchedMetadataJson = file.getFetchedMetadata();
             if (fetchedMetadataJson != null && !fetchedMetadataJson.isBlank()) {
-                return objectMapper.readValue(fetchedMetadataJson, BookMetadata.class);
+                try {
+                    BookMetadata fetched = objectMapper.readValue(fetchedMetadataJson, BookMetadata.class);
+                    if (MetadataIdentityMatcher.matches(original, fetched)) return fetched;
+                } catch (Exception e) {log.warn("Ignoring unreadable fetched metadata for file {}", file.getId());}
             }
+            if (original != null) return original;
         } catch (Exception e) {
             log.error("Error parsing existing metadata for file {}: {}", file.getId(), e.getMessage());
         }

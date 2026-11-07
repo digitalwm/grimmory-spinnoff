@@ -46,6 +46,21 @@ class BookDropServiceFinalizeTest {
         assertSame(original, org.springframework.test.util.ReflectionTestUtils.getField(context, "metadata"));
     }
 
+    @Test
+    void explicitImportsCannotBypassARejectedCachedMatchCopiedByAnOldClient() throws Exception {
+        var file=org.booklore.model.entity.BookdropFileEntity.builder().originalMetadata("original").fetchedMetadata("stale").build();
+        var original=org.booklore.model.dto.BookMetadata.builder().title("Ever Fallen").authors(List.of("Elle Scott")).build();
+        var stale=org.booklore.model.dto.BookMetadata.builder().title("Never Have I Ever Fallen for a Movie Star").authors(List.of("Juliet Bardsley")).build();
+        when(objectMapper.readValue("original",org.booklore.model.dto.BookMetadata.class)).thenReturn(original);
+        when(objectMapper.readValue("stale",org.booklore.model.dto.BookMetadata.class)).thenReturn(stale);
+        var request=new BookdropFinalizeRequest.BookdropFinalizeFile();request.setMetadata(stale);
+        assertThrows(APIException.class,()->org.springframework.test.util.ReflectionTestUtils.invokeMethod(bookDropService,
+                "prepareFileProcessingContext",file,request,1L,1L));
+        request.setMetadata(original);
+        var context=org.springframework.test.util.ReflectionTestUtils.invokeMethod(bookDropService,"prepareFileProcessingContext",file,request,1L,1L);
+        assertSame(original,org.springframework.test.util.ReflectionTestUtils.getField(context,"metadata"));
+    }
+
     @Mock
     private BookdropFileRepository bookdropFileRepository;
     @Mock

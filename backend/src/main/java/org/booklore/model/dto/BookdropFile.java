@@ -11,6 +11,8 @@ public class BookdropFile {
     private Long fileSize;
     private BookMetadata originalMetadata;
     private BookMetadata fetchedMetadata;
+    private boolean metadataMatchRejected;
+    private String metadataMatchMessage;
     private String createdAt;
     private String updatedAt;
     private Status status;

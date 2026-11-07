@@ -24,6 +24,17 @@ The metadata completeness score remains a measure of populated fields, not ident
 confidence. Ambiguous matches may need manual metadata selection. Existing library
 records have not been subjected to bulk duplicate or metadata cleanup.
 
+## BookDrop metadata matches
+
+Stored fetched suggestions are revalidated against embedded title/author identity
+when read, including proposals created before the identity guard existed. Rejected
+suggestions remain in the database for inspection but are omitted from copyable API
+metadata. The review list shows a rejection warning and uses the original file metadata.
+Bulk edits start from the original metadata when a cached suggestion is invalid.
+Import requests from stale clients cannot submit a mismatched copied identity while
+that rejected suggestion remains stored. Existing automatic imports retain their
+embedded-metadata fallback.
+
 ## Catalogue duplicates
 
 Open a library's menu, then **Manage library → Find duplicates → Catalogue duplicates**.

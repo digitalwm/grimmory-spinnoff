@@ -390,6 +390,14 @@ public class BookDropService {
             libraryId = fileReq.getLibraryId() != null ? fileReq.getLibraryId() : defaultLibraryId;
             pathId = fileReq.getPathId() != null ? fileReq.getPathId() : defaultPathId;
             metadata = fileReq.getMetadata();
+            // A client opened before validation was added can still submit a copied stale proposal.
+            if (metadata != null && fileEntity.getOriginalMetadata() != null && fileEntity.getFetchedMetadata() != null) {
+                BookMetadata original = objectMapper.readValue(fileEntity.getOriginalMetadata(), BookMetadata.class);
+                BookMetadata cached = objectMapper.readValue(fileEntity.getFetchedMetadata(), BookMetadata.class);
+                if (cached != null && !MetadataIdentityMatcher.matches(original, cached)
+                        && !MetadataIdentityMatcher.matches(original, metadata))
+                    throw ApiError.CONFLICT.createException("This file has a rejected metadata match. Reset copied metadata and reload BookDrop before importing it.");
+            }
             log.debug("Processing fileId={}, fileName={} with provided metadata, libraryId={}, pathId={}", fileEntity.getId(), fileEntity.getFileName(), libraryId, pathId);
         } else {
             if (defaultLibraryId == null || defaultPathId == null) {

@@ -42,6 +42,8 @@ export interface BookdropFile {
   fileSize: number;
   originalMetadata?: BookMetadata;
   fetchedMetadata?: BookMetadata;
+  metadataMatchRejected?: boolean;
+  metadataMatchMessage?: string;
   createdAt: string;
   updatedAt: string;
   status: BookdropFileStatus;

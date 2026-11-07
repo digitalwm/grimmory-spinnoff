@@ -496,3 +496,8 @@ div.cover-image {
 .selected-count-label {
   font-size: var(--app-text-sm);
 }
+
+.metadata-rejection {
+  color: var(--p-orange-400, #fb923c);
+  margin: 0.5rem 1rem;
+}

@@ -89,6 +89,11 @@ class BookDropServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private BookdropFinalizeProgressService finalizeProgressService;
+    @Mock
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     @InjectMocks
     private BookDropService bookDropService;
 
@@ -159,7 +164,7 @@ class BookDropServiceTest {
 
     @Test
     void getFilesByStatus_WhenStatusIsPending_ShouldReturnPendingFiles() {
-        Pageable pageable = PageRequest.of(0, 10);
+        Pageable pageable = PageRequest.of(0, 10, org.springframework.data.domain.Sort.by("createdAt", "id"));
         Page<BookdropFileEntity> entityPage = new PageImpl<>(List.of(bookdropFileEntity));
         Page<BookdropFile> expectedPage = new PageImpl<>(List.of(bookdropFile));
 
@@ -177,7 +182,7 @@ class BookDropServiceTest {
 
     @Test
     void getFilesByStatus_WhenStatusIsNotPending_ShouldReturnAllFiles() {
-        Pageable pageable = PageRequest.of(0, 10);
+        Pageable pageable = PageRequest.of(0, 10, org.springframework.data.domain.Sort.by("createdAt", "id"));
         Page<BookdropFileEntity> entityPage = new PageImpl<>(List.of(bookdropFileEntity));
 
         when(bookdropFileRepository.findAll(pageable)).thenReturn(entityPage);
@@ -636,7 +641,7 @@ class BookDropServiceTest {
     }
 
     @Test
-    void finalizeImport_usesEagerPathsQueryForReregistration() throws Exception {
+    void finalizeImport_resumesAffectedLibraryMonitoringWhenAnImportFails() throws Exception {
         BookdropFinalizeRequest request = new BookdropFinalizeRequest();
         request.setSelectAll(true);
         request.setDefaultLibraryId(1L);
@@ -655,10 +660,12 @@ class BookDropServiceTest {
         try (MockedStatic<Files> filesMock = mockStatic(Files.class, withSettings().lenient())) {
             filesMock.when(() -> Files.exists(any(Path.class))).thenReturn(false);
 
-            bookDropService.finalizeImport(request);
+            var result = bookDropService.finalizeImport(request);
 
-            // findByIdWithPaths is called for both moveFile and reregisterAffectedLibraries
-            verify(libraryRepository, atLeast(2)).findByIdWithPaths(1L);
+            assertEquals(1, result.getFailed());
+            verify(monitoringRegistrationService).suppressLibraryEvents(1L);
+            verify(monitoringRegistrationService).resumeLibraryEvents(1L);
+            verify(libraryRepository, atLeastOnce()).findByIdWithPaths(1L);
         }
     }
 }
