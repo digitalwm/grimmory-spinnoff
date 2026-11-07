@@ -49,7 +49,7 @@ public class CatalogueReconciliationService {
     public record Preview(long libraryId, long targetBookId, List<Member> members, String path,
                           String fileSha256, long fileBytes, boolean eligible, List<String> reasons,
                           Map<String, Integer> relatedRecords, Map<String, Map<Long, String>> metadataDifferences,
-                          String token, List<FilePlan> files, int quarantineRetentionDays) {}
+                          String token, List<FilePlan> files, int quarantineRetentionDays, boolean identityConfirmed) {}
     public record FilePlan(long fileId, long bookId, String path, String bookType, String sha256, long bytes,
                            String action, long retainedFileId, String retainedPath) {}
     public record Receipt(String id, long targetBookId, List<Long> removedBookIds, String fileSha256, Instant completedAt,
@@ -98,7 +98,9 @@ public class CatalogueReconciliationService {
         }
         Map<Long, List<FileRow>> grouped = new TreeMap<>();
         for (FileRow file : all) grouped.computeIfAbsent(root(parents, file.bookId), ignored -> new ArrayList<>()).add(file);
+        var excluded=DuplicateExclusions.load(jdbc,libraryId);
         List<List<FileRow>> duplicates = grouped.values().stream()
+                .flatMap(rows->DuplicateExclusions.split(rows,FileRow::bookId,excluded).stream())
                 .filter(rows -> rows.stream().map(FileRow::bookId).distinct().count() > 1)
                 .filter(rows -> search == null || search.isBlank() || rows.stream().anyMatch(file ->
                         normalise(file.title + " " + file.name).contains(normalise(search))))
@@ -117,8 +119,39 @@ public class CatalogueReconciliationService {
         return inspect(libraryId, bookIds, targetBookId, false).preview;
     }
 
+    @Transactional(readOnly = true)
+    public Preview preview(long libraryId, List<Long> bookIds, long targetBookId, boolean identityConfirmed) {
+        requireAdmin();
+        return inspect(libraryId,bookIds,targetBookId,false,false,identityConfirmed).preview;
+    }
+
+    @Transactional
+    public void exclude(long libraryId,List<Long> bookIds) {exclude(libraryId,bookIds,null);}
+
+    @Transactional
+    public void exclude(long libraryId,List<Long> bookIds,Long isolatedBookId) {
+        var actor=requireAdmin();quarantine.lock();
+        var ids=validateIds(bookIds,bookIds.getFirst());
+        if(isolatedBookId!=null&&!ids.contains(isolatedBookId))throw ApiError.GENERIC_BAD_REQUEST.createException("The separated book must belong to this group.");
+        var rows=store.rows("book","id",ids,true);
+        if(rows.size()!=ids.size()||rows.stream().anyMatch(row->!Long.toString(libraryId).equals(row.get("library_id"))))
+            throw ApiError.CONFLICT.createException("Select existing records from this library.");
+        var excluded=DuplicateExclusions.load(jdbc,libraryId);
+        for(int i=0;i<ids.size();i++)for(int j=i+1;j<ids.size();j++) {
+            if(isolatedBookId!=null&&!ids.get(i).equals(isolatedBookId)&&!ids.get(j).equals(isolatedBookId))continue;
+            var pair=DuplicateExclusions.Pair.of(ids.get(i),ids.get(j));
+            if(excluded.add(pair))jdbc.update("INSERT INTO catalogue_duplicate_exclusion(library_id,book_low_id,book_high_id,user_id) VALUES(?,?,?,?)",
+                    libraryId,pair.low(),pair.high(),actor.getId());
+        }
+    }
+
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Receipt merge(long libraryId, List<Long> bookIds, long targetBookId, String previewToken, boolean confirmed) {
+        return merge(libraryId,bookIds,targetBookId,previewToken,confirmed,false);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Receipt merge(long libraryId,List<Long> bookIds,long targetBookId,String previewToken,boolean confirmed,boolean identityConfirmed) {
         BookLoreUser actor = requireAdmin();
         if (!confirmed || previewToken == null || previewToken.isBlank())
             throw ApiError.GENERIC_BAD_REQUEST.createException("Inspect and explicitly confirm this group before merging.");
@@ -126,7 +159,7 @@ public class CatalogueReconciliationService {
         List<Long> ids = validateIds(bookIds, targetBookId);
         if (store.rows("book", "id", ids, true).size() != ids.size())
             throw ApiError.CONFLICT.createException("Book records changed. Scan again.");
-        Inspection inspection = inspect(libraryId, ids, targetBookId, true);
+        Inspection inspection = inspect(libraryId, ids, targetBookId, true, false, identityConfirmed);
         return applyInspection(actor, libraryId, ids, targetBookId, inspection, previewToken);
     }
 
@@ -200,6 +233,7 @@ public class CatalogueReconciliationService {
             for (var move : moves) CatalogueQuarantineService.verify(Path.of(move.quarantinePath()), move.sha256());
         } catch (Exception e) {throw ApiError.CONFLICT.createException("File content changed during reconciliation. The transaction was rolled back.");}
         Map<String, Object> after = new TreeMap<>(store.snapshot(inspection.schema, List.of(targetBookId), retainedFiles, true));
+        after.put("_human_identity_confirmed",current.identityConfirmed);
         after.put("_file_plan", current.files); after.put("_quarantine", moves); after.put("_retention_days", quarantine.retentionDays());
         Instant completed = Instant.now();
         jdbc.update("""
@@ -244,6 +278,10 @@ public class CatalogueReconciliationService {
     }
 
     private Inspection inspect(long libraryId, List<Long> requestedIds, long targetBookId, boolean lock, boolean expand) {
+        return inspect(libraryId,requestedIds,targetBookId,lock,expand,false);
+    }
+
+    private Inspection inspect(long libraryId,List<Long> requestedIds,long targetBookId,boolean lock,boolean expand,boolean identityConfirmed) {
         List<Long> ids = validateIds(requestedIds, targetBookId);
         List<FileRow> all = libraryFiles(libraryId, expand ? null : ids);
         // Only explicit inspection expands candidates; direct merges honor the selected records.
@@ -269,6 +307,9 @@ public class CatalogueReconciliationService {
         CatalogueReconciliationStore.Schema schema = store.schema();
         Map<String, List<Map<String, String>>> before = store.snapshot(schema, ids, files.stream().map(FileRow::fileId).toList(), lock);
         List<Map<String, String>> roots = store.rows("library_path", "id", files.stream().map(FileRow::pathId).distinct().toList(), lock);
+        before.put("catalogue_duplicate_exclusion", java.util.stream.Stream.concat(
+                store.rows("catalogue_duplicate_exclusion","book_low_id",ids,lock).stream(),
+                store.rows("catalogue_duplicate_exclusion","book_high_id",ids,lock).stream()).distinct().toList());
         before.put("library_path", roots);
         before.put("library", store.rows("library", "id", List.of(libraryId), lock));
         // Discovery precedes the locks. Never base a direct merge on values changed during that gap.
@@ -310,10 +351,10 @@ public class CatalogueReconciliationService {
         }
         FileRow target = files.stream().filter(file -> file.bookId == targetBookId).findFirst().orElseThrow();
         BookMetadata targetIdentity = BookMetadata.builder().title(target.title).authors(authors.getOrDefault(targetBookId, List.of())).build();
-        if (authors.values().stream().anyMatch(List::isEmpty) || authors.size() != ids.size()) reasons.add("Author identity is incomplete.");
+        if (!identityConfirmed && (authors.values().stream().anyMatch(List::isEmpty) || authors.size() != ids.size())) reasons.add("Author identity is incomplete.");
         for (FileRow file : files) {
             BookMetadata identity = BookMetadata.builder().title(file.title).authors(authors.getOrDefault(file.bookId, List.of())).build();
-            if (!MetadataIdentityMatcher.matches(targetIdentity, identity) || !MetadataIdentityMatcher.matches(identity, targetIdentity)) {
+            if (!identityConfirmed && (!MetadataIdentityMatcher.matches(targetIdentity, identity) || !MetadataIdentityMatcher.matches(identity, targetIdentity))) {
                 reasons.add("Titles or authors disagree. Resolve the metadata before merging."); break;
             }
         }
@@ -376,11 +417,11 @@ public class CatalogueReconciliationService {
                 || CatalogueReconciliationStore.REVIEW_ONLY.contains(table)) related.put(table, before.get(table).size());
         Map<String, Map<Long, String>> differences = differences(before.getOrDefault("book_metadata", List.of()));
         FilePlan anchor = plans.stream().filter(file -> file.fileId == preferredFileId).findFirst().orElseThrow();
-        String token = sha(libraryId + "\n" + targetBookId + "\n" + json(plans) + "\n" + snapshot + "\n" + quarantine.retentionDays());
+        String token = sha(identityConfirmed + "\n" + libraryId + "\n" + targetBookId + "\n" + json(plans) + "\n" + snapshot + "\n" + quarantine.retentionDays());
         List<Member> members = new ArrayList<>();
         for (FileRow file : files) if (members.stream().noneMatch(member -> member.bookId == file.bookId)) members.add(member(file, authors.getOrDefault(file.bookId, List.of())));
         Preview preview = new Preview(libraryId, targetBookId, members, anchor.path, anchor.sha256, totalBytes,
-                reasons.isEmpty(), reasons.stream().distinct().toList(), related, differences, token, plans, quarantine.retentionDays());
+                reasons.isEmpty(), reasons.stream().distinct().toList(), related, differences, token, plans, quarantine.retentionDays(), identityConfirmed);
         return new Inspection(preview, schema, before, changes, files, fileTargets);
     }
 

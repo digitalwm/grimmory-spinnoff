@@ -66,7 +66,10 @@ public class DuplicateDetectionService {
             groups.addAll(findByFilename(books, alreadyGrouped, formatPriority));
         }
 
-        return groups;
+        var excluded=candidateLoader.exclusions(request.libraryId());
+        return groups.stream().flatMap(group->DuplicateExclusions.split(group.books(),book->book.getId(),excluded).stream()
+                .filter(part->part.size()>1).map(part->new DuplicateGroup(
+                        part.stream().anyMatch(book->book.getId().equals(group.suggestedTargetBookId()))?group.suggestedTargetBookId():part.getFirst().getId(),group.matchReason(),part))).toList();
     }
 
     private List<DuplicateGroup> findByIsbn(List<BookEntity> books, Set<Long> alreadyGrouped, List<BookFileType> formatPriority) {

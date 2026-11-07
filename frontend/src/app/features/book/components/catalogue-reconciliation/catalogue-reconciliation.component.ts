@@ -18,9 +18,12 @@ import {
 })
 export class CatalogueReconciliationComponent implements OnChanges {
   @Input({required: true}) libraryId!: number;
+  @Input() separatedBookIds: number[] = [];
   @Input() resolvedBookIds: number[] = [];
   @Input() reviewAssessment: QuickMergeResult | null = null;
   @Input() reviewGroup: CatalogueGroup | null = null;
+  @Output() separated = new EventEmitter<number>();
+  @Output() excluded = new EventEmitter<number[]>();
   @Output() reconciled = new EventEmitter<CatalogueReceipt>();
   @Output() mergingChange = new EventEmitter<boolean>();
   @ViewChild('previewPanel') private previewPanel?: ElementRef<HTMLElement>;
@@ -48,6 +51,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
 
   ngOnChanges(changes?: SimpleChanges): void {
     if (changes && !changes['libraryId']) {
+      if (changes['separatedBookIds']) for(const id of this.separatedBookIds) this.removeMember(id);
       if (changes['resolvedBookIds']) this.pruneReport(this.resolvedBookIds);
       if (changes['reviewGroup'] || changes['reviewAssessment']) {
         this.generation++; this.busy.set(false); this.confirmed = false; this.inspected.set(null); this.selectedGroup = null;
@@ -126,7 +130,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     });
   }
 
-  inspect(group: CatalogueGroup, target = group.suggestedTargetBookId, refresh = false): void {
+  inspect(group: CatalogueGroup, target = group.suggestedTargetBookId, refresh = false, identityConfirmed = false): void {
     if (this.busy() || this.merging() || !this.isAdmin()) return;
     const cached = this.assessments()[group.key];
     if (!refresh && cached?.preview && cached.preview.targetBookId === target) {this.showAssessment(group, cached); return;}
@@ -139,7 +143,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.inspected.set(null);
     this.error.set(null);
     this.busy.set(true);
-    this.service.preview(this.libraryId, group, target).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.service.preview(this.libraryId, group, target, identityConfirmed).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: preview => {
         if (generation !== this.generation) return;
         this.selectedGroup = {...group, members: preview.members};
@@ -149,6 +153,47 @@ export class CatalogueReconciliationComponent implements OnChanges {
       },
       error: err => this.fail(err, generation),
     });
+  }
+
+  confirmIdentity(): void {
+    if (this.selectedGroup && this.targetBookId != null) this.inspect(this.selectedGroup, this.targetBookId, true, true);
+  }
+
+  canConfirmIdentity(): boolean {
+    return !!this.inspected()?.reasons.some(reason => reason === 'Titles or authors disagree. Resolve the metadata before merging.' || reason === 'Author identity is incomplete.');
+  }
+
+  notDuplicates(group: CatalogueGroup, isolatedBookId?: number): void {
+    if (!this.isAdmin() || this.busy() || this.merging()) return;
+    this.busy.set(true); this.error.set(null);
+    const ids=group.members.map(member=>member.bookId);
+    this.service.notDuplicates(this.libraryId,ids,isolatedBookId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next:()=>{
+        this.busy.set(false);
+        if(isolatedBookId==null){this.pruneReport(ids);this.excluded.emit(ids);}
+        else {
+          this.removeMember(isolatedBookId);
+          this.separated.emit(isolatedBookId);
+        }
+      },
+      error:err=>{this.busy.set(false);this.error.set(err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed'));},
+    });
+  }
+
+  private removeMember(bookId: number): void {
+    if(this.inspected()?.members.some(member=>member.bookId===bookId)){
+      this.inspected.set(null);this.confirmed=false;this.selectedGroup=null;
+    }
+    const report=this.report();if(!report)return;
+    let removedExtra=0;
+    const groups=report.groups.map(group=>{
+      const members=group.members.filter(member=>member.bookId!==bookId);
+      if(members.length!==group.members.length)removedExtra+=Math.min(1,group.members.length-1);
+      return {...group,members,key:members.map(member=>member.bookId).join('-'),
+        suggestedTargetBookId:members.some(member=>member.bookId===group.suggestedTargetBookId)?group.suggestedTargetBookId:members[0]?.bookId};
+    }).filter(group=>group.members.length>1);
+    this.report.set({...report,groups,totalGroups:report.totalGroups-(report.groups.length-groups.length),extraRecords:Math.max(0,report.extraRecords-removedExtra)});
+    this.assessments.set({});
   }
 
   selectTarget(id: number): void {

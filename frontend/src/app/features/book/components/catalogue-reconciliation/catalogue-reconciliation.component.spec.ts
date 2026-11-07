@@ -9,7 +9,7 @@ import {CatalogueReconciliationComponent} from './catalogue-reconciliation.compo
 
 describe('CatalogueReconciliationComponent', () => {
   const user = signal({permissions: {admin: true}});
-  const api = {scan: vi.fn(), preview: vi.fn(), merge: vi.fn(), receipt: vi.fn(), receipts: vi.fn(), quarantinedFile: vi.fn(), quickMerge: vi.fn()};
+  const api = {scan: vi.fn(), preview: vi.fn(), merge: vi.fn(), receipt: vi.fn(), receipts: vi.fn(), quarantinedFile: vi.fn(), notDuplicates: vi.fn(), quickMerge: vi.fn()};
   const group: CatalogueGroup = {key: 'shared', path: '/books/shared.epub', suggestedTargetBookId: 1,
     members: [{bookId: 1, fileId: 11, title: 'Book', authors: ['Ada'], storedHash: 'same'},
       {bookId: 2, fileId: 22, title: 'Book', authors: ['Ada'], storedHash: 'same'}]};
@@ -77,7 +77,7 @@ describe('CatalogueReconciliationComponent', () => {
   });
   it('opens the selected formats group directly as a read-only preview', () => {
     component.reviewGroup = group; component.ngOnChanges();
-    expect(api.preview).toHaveBeenCalledExactlyOnceWith(7, group, 1);
+    expect(api.preview).toHaveBeenCalledExactlyOnceWith(7, group, 1, false);
     expect(api.scan).not.toHaveBeenCalled(); expect(api.merge).not.toHaveBeenCalled();
   });
   it('includes title search in the bounded scan', () => {
@@ -128,6 +128,17 @@ describe('CatalogueReconciliationComponent', () => {
     component.ngOnChanges({reviewGroup:new SimpleChange(null,group,false)});expect(api.preview).not.toHaveBeenCalled();
     component.resolvedBookIds=[1,2];component.ngOnChanges({resolvedBookIds:new SimpleChange([],component.resolvedBookIds,false)});
     expect(component.report()?.groups).toHaveLength(0);expect(component.inspected()).toBeNull();expect(api.scan).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires a fresh server preview when the human confirms book identity',()=>{
+    component.inspect(group);api.preview.mockClear();component.confirmIdentity();
+    expect(api.preview).toHaveBeenCalledWith(7,group,1,true);
+    expect(component.confirmed).toBe(false);
+  });
+  it('remembers not-duplicate decisions and removes the group locally without scanning',()=>{
+    component.scan();api.notDuplicates.mockReturnValue(of(undefined));const emitted=vi.spyOn(component.excluded,'emit');
+    component.notDuplicates(group);expect(api.notDuplicates).toHaveBeenCalledWith(7,[1,2],undefined);
+    expect(component.report()?.groups).toHaveLength(0);expect(api.scan).toHaveBeenCalledTimes(1);expect(emitted).toHaveBeenCalledWith([1,2]);
   });
 
 });

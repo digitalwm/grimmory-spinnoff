@@ -51,6 +51,15 @@ class DuplicateDetectionServiceTest {
 
     // ── Helper methods ──────────────────────────────────────────
 
+    @Test void rememberedPairDecisionsSuppressTheFormatsListWithoutChangingRecords() {
+        var first=createBook(BookFileType.EPUB,"Same Title","Same Author");
+        var second=createBook(BookFileType.PDF,"Same Title","Same Author");
+        when(candidateLoader.load(1L)).thenReturn(List.of(first,second));
+        when(candidateLoader.exclusions(1L)).thenReturn(Set.of(DuplicateExclusions.Pair.of(first.getId(),second.getId())));
+        var request=new DuplicateDetectionRequest(1L,false,false,true,false,false);
+        assertThat(service.findDuplicates(request)).isEmpty();
+    }
+
     private BookEntity createBook(BookFileType fileType, String title, String authorName) {
         long id = nextBookId++;
         BookFileEntity file = BookFileEntity.builder()

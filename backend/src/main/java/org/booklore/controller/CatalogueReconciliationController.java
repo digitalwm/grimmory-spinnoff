@@ -21,9 +21,9 @@ import java.util.Map;
 public class CatalogueReconciliationController {
     private final CatalogueReconciliationService service;
     private final org.booklore.service.book.CatalogueQuarantineService quarantine;
-    public record InspectRequest(@NotNull Long libraryId, @NotEmpty @Size(min = 2, max = 20) List<@NotNull Long> bookIds, @NotNull Long targetBookId) {}
+    public record InspectRequest(@NotNull Long libraryId, @NotEmpty @Size(min = 2, max = 20) List<@NotNull Long> bookIds, @NotNull Long targetBookId, boolean identityConfirmed) {}
     public record MergeRequest(@NotNull Long libraryId, @NotEmpty @Size(min = 2, max = 20) List<@NotNull Long> bookIds,
-                               @NotNull Long targetBookId, @NotNull String token, boolean confirmed) {}
+                               @NotNull Long targetBookId, @NotNull String token, boolean confirmed, boolean identityConfirmed) {}
 
     @GetMapping
     public ResponseEntity<CatalogueReconciliationService.Scan> scan(@RequestParam long libraryId,
@@ -32,17 +32,24 @@ public class CatalogueReconciliationController {
     }
     @PostMapping("/preview")
     public ResponseEntity<CatalogueReconciliationService.Preview> preview(@RequestBody @Valid InspectRequest request) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.preview(request.libraryId, request.bookIds, request.targetBookId));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.preview(request.libraryId, request.bookIds, request.targetBookId,request.identityConfirmed));
     }
     @PostMapping("/quick-merge")
     public ResponseEntity<CatalogueReconciliationService.QuickMergeResult> quickMerge(@RequestBody @Valid InspectRequest request) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.quickMerge(request.libraryId, request.bookIds, request.targetBookId));
     }
 
+    public record ExcludeRequest(@NotNull Long libraryId,@NotEmpty @Size(min=2,max=20) List<@NotNull Long> bookIds, Long isolatedBookId) {}
+    @PostMapping("/not-duplicates")
+    public ResponseEntity<Void> exclude(@RequestBody @Valid ExcludeRequest request) {
+        service.exclude(request.libraryId,request.bookIds,request.isolatedBookId);
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+    }
+
     @PostMapping("/merge")
     public ResponseEntity<CatalogueReconciliationService.Receipt> merge(@RequestBody @Valid MergeRequest request) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.merge(request.libraryId, request.bookIds,
-                request.targetBookId, request.token, request.confirmed));
+                request.targetBookId, request.token, request.confirmed,request.identityConfirmed));
     }
     @GetMapping("/quarantine/{id}/file")
     public ResponseEntity<org.springframework.core.io.Resource> quarantinedFile(@PathVariable String id) {

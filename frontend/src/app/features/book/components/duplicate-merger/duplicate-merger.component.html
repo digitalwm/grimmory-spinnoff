@@ -30,7 +30,7 @@
       }
     </div>
     <div [hidden]="mode !== 'catalogue'">
-      <app-catalogue-reconciliation [libraryId]="libraryId" [reviewGroup]="reviewedGroup" [reviewAssessment]="reviewAssessment" [resolvedBookIds]="resolvedBookIds" (reconciled)="onReconciled($event)" (mergingChange)="catalogueMerging = $event" />
+      <app-catalogue-reconciliation [libraryId]="libraryId" [reviewGroup]="reviewedGroup" [reviewAssessment]="reviewAssessment" [resolvedBookIds]="resolvedBookIds" [separatedBookIds]="separatedBookIds" (reconciled)="onReconciled($event)" (excluded)="onExcluded($event)" (separated)="onSeparated($event)" (mergingChange)="catalogueMerging = $event" />
     </div>
     <div [hidden]="mode !== 'formats'">
 
@@ -158,6 +158,7 @@
                     (click)="mergeGroup(group)"
                     [disabled]="isMerging() || !!group.reviewAssessment" />
                   <p-button [label]="(group.reviewAssessment || group.error ? 'book.catalogueReconciliation.resolveIssue' : 'book.catalogueReconciliation.inspect') | transloco" icon="pi pi-eye" size="small" severity="secondary" [outlined]="true" (click)="reviewGroup(group)" [disabled]="isMerging()" />
+                  <p-button [label]="'book.catalogueReconciliation.notDuplicates' | transloco" icon="pi pi-ban" size="small" severity="secondary" (click)="notDuplicates(group)" [disabled]="isMerging()" />
                   @if (getDeleteSelectedCount(group) > 0) {
                     <p-button
                       [label]="t('deleteSelected', { count: getDeleteSelectedCount(group) })"
@@ -221,6 +222,7 @@
                         </div>
                       }
                     </div>
+                    <p-button [label]="'book.catalogueReconciliation.separateBook' | transloco" icon="pi pi-ban" size="small" severity="secondary" (click)="notDuplicates(group, book.id)" [disabled]="isMerging()" />
                     <div class="book-select">
                       <p-radioButton
                         [name]="'target-' + group.suggestedTargetBookId"

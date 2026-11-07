@@ -43,6 +43,7 @@ export interface CataloguePreview {
   fileSha256: string | null;
   fileBytes: number;
   eligible: boolean;
+  identityConfirmed?: boolean;
   reasons: string[];
   relatedRecords: Record<string, number>;
   metadataDifferences: Record<string, Record<string, string | null>>;
@@ -78,9 +79,9 @@ export class CatalogueReconciliationService {
   scan(libraryId: number, page: number, search = '', offset?: number) {
     return this.http.get<CatalogueScan>(this.url, {params: {libraryId, page, size: 20, search, ...(offset === undefined ? {} : {offset})}});
   }
-  preview(libraryId: number, group: CatalogueGroup, targetBookId: number) {
+  preview(libraryId: number, group: CatalogueGroup, targetBookId: number, identityConfirmed = false) {
     return this.http.post<CataloguePreview>(`${this.url}/preview`, {
-      libraryId, bookIds: group.members.map(member => member.bookId), targetBookId,
+      libraryId, bookIds: group.members.map(member => member.bookId), targetBookId, identityConfirmed,
     });
   }
   quickMerge(libraryId: number, group: CatalogueGroup, targetBookId: number) {
@@ -95,7 +96,11 @@ export class CatalogueReconciliationService {
       targetBookId: preview.targetBookId,
       token: preview.token,
       confirmed: true,
+      identityConfirmed: preview.identityConfirmed ?? false,
     }).pipe(tap(() => void this.queryClient.invalidateQueries({queryKey: bookQueryKeys.all()})));
+  }
+  notDuplicates(libraryId: number, bookIds: number[], isolatedBookId?: number) {
+    return this.http.post<void>(`${this.url}/not-duplicates`, {libraryId, bookIds, ...(isolatedBookId == null ? {} : {isolatedBookId})});
   }
   quarantinedFile(id: string) {
     return this.http.get(`${this.url}/quarantine/${encodeURIComponent(id)}/file`, {responseType: 'blob'});

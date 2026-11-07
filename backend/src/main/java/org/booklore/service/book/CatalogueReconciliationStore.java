@@ -55,6 +55,9 @@ public class CatalogueReconciliationStore {
                     }
                 }
             }
+            // These are administrative pair decisions, removed by their ON DELETE CASCADE FKs.
+            // They are not reading data to transfer to the surviving record.
+            bookLinks.remove("catalogue_duplicate_exclusion");
             Set<String> needed = new TreeSet<>(bookLinks.keySet());
             needed.addAll(fileLinks.keySet()); needed.add("book"); needed.add("book_file");
             if (columns.containsKey("kobo_reading_state")) needed.add("kobo_reading_state");

@@ -57,6 +57,7 @@ class CatalogueReconciliationServiceTest {
         jdbc.execute("CREATE TABLE catalogue_reconciliation_lock(id INT PRIMARY KEY)");
         jdbc.update("INSERT INTO catalogue_reconciliation_lock VALUES(1)");
         jdbc.execute("CREATE TABLE catalogue_quarantine(id VARCHAR(36) PRIMARY KEY,receipt_id VARCHAR(36),library_id BIGINT,original_path VARCHAR(2000),quarantine_path VARCHAR(2000),retained_path VARCHAR(2000),retained_file_id BIGINT,file_sha256 VARCHAR(64),state VARCHAR(32),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,purge_after TIMESTAMP,completed_at TIMESTAMP,detail VARCHAR(4000))");
+        jdbc.execute("CREATE TABLE catalogue_duplicate_exclusion(library_id BIGINT,book_low_id BIGINT REFERENCES book(id) ON DELETE CASCADE,book_high_id BIGINT REFERENCES book(id) ON DELETE CASCADE,user_id BIGINT,PRIMARY KEY(library_id,book_low_id,book_high_id))");
         jdbc.update("INSERT INTO library(id) VALUES(1)");
         jdbc.update("INSERT INTO library_path VALUES(1,?)", folder.toString());
         jdbc.update("INSERT INTO book VALUES(1,1,1,80,false,false),(2,1,1,70,false,false)");
@@ -153,11 +154,13 @@ class CatalogueReconciliationServiceTest {
         assertEquals("Changed by another process", Files.readString(file));
     }
 
-    @Test void changedGroupMembershipCannotBeApplied() {
+    @Test void aNewOutsideSharedReferenceIsPreservedWithoutExpandingTheSelectedMerge() {
         var preview = preview();
         jdbc.update("INSERT INTO book VALUES(3,1,1,70,false,false)");
         jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash) VALUES(33,3,'','shared.epub','same-hash')");
-        assertThrows(APIException.class, () -> merge(preview)); assertEquals(3, count("book"));
+        merge(preview);assertEquals(2,count("book"));
+        assertEquals(3L,jdbc.queryForObject("SELECT book_id FROM book_file WHERE id=33",Long.class));
+        assertTrue(Files.exists(file));
     }
 
     @Test void missingFileConflictingStoredHashesAndMetadataBlockMerges() throws Exception {
@@ -466,6 +469,56 @@ class CatalogueReconciliationServiceTest {
                 mock(org.booklore.service.monitoring.MonitoringRegistrationService.class));
         assertThrows(APIException.class,()->transaction.execute(status->changingService.quickMerge(1,List.of(1L,2L),1)));
         assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
+    }
+
+    @Test void humanIdentityDecisionAllowsBenAndBenjaminWithSelectedMetadataAndFile() {
+        jdbc.update("UPDATE book_metadata SET title='The Rest of Our Lives'");
+        jdbc.update("UPDATE author SET name='Ben Markovits' WHERE id=1");
+        jdbc.update("INSERT INTO author VALUES(2,'Benjamin Markovits')");
+        jdbc.update("UPDATE book_metadata_author_mapping SET author_id=2 WHERE book_id=2");
+        var blocked=service.preview(1,List.of(1L,2L),2,false);assertFalse(blocked.eligible());
+        assertEquals("REVIEW_REQUIRED",quick(List.of(1L,2L),2).status());
+        var decision=service.preview(1,List.of(1L,2L),2,true);assertTrue(decision.eligible());assertTrue(decision.identityConfirmed());
+        assertThrows(APIException.class,()->transaction.execute(status->service.merge(1,List.of(1L,2L),2,decision.token(),true,false)));
+        var receipt=transaction.execute(status->service.merge(1,List.of(1L,2L),2,decision.token(),true,true));
+        assertEquals(2,receipt.targetBookId());assertEquals(1,count("book"));
+    }
+    @Test void humanIdentityDecisionCannotBypassConflictingReadingData() {
+        jdbc.update("INSERT INTO user_book_progress VALUES(101,1,8,'one'),(102,2,8,'two')");
+        var decision=service.preview(1,List.of(1L,2L),1,true);assertFalse(decision.eligible());
+        assertThrows(APIException.class,()->transaction.execute(status->service.merge(1,List.of(1L,2L),1,decision.token(),true,true)));
+        assertEquals(2,count("book"));
+    }
+    @Test void exclusionPersistsAcrossScansAndDoesNotModifyBooksOrFiles() {
+        assertEquals(1,service.scan(1,0,20).totalGroups());
+        transaction.executeWithoutResult(status->service.exclude(1,List.of(1L,2L)));
+        transaction.executeWithoutResult(status->service.exclude(1,List.of(2L,1L)));
+        assertEquals(0,service.scan(1,0,20).totalGroups());assertEquals(1,count("catalogue_duplicate_exclusion"));
+        assertEquals(2,count("book"));assertEquals(2,count("book_file"));assertEquals(0,count("catalogue_reconciliation_audit"));
+    }
+
+    @Test void separatingOneBookPreservesOtherPairsInALargerGroup() throws Exception {
+        mixedGroup();transaction.executeWithoutResult(status->service.exclude(1,List.of(1L,2L,3L,4L),4L));
+        assertEquals(3,count("catalogue_duplicate_exclusion"));
+        var scan=service.scan(1,0,20);assertEquals(1,scan.totalGroups());
+        assertEquals(List.of(1L,2L,3L),scan.groups().getFirst().members().stream().map(CatalogueReconciliationService.Member::bookId).toList());
+        assertEquals(4,count("book"));
+    }
+
+    @Test void laterExplicitMergeOfSeparatedRecordsArchivesAndRemovesTheirPairDecision() {
+        transaction.executeWithoutResult(status->service.exclude(1,List.of(1L,2L)));
+        var decision=service.preview(1,List.of(1L,2L),1,true);assertTrue(decision.eligible(),decision.reasons().toString());
+        var receipt=transaction.execute(status->service.merge(1,List.of(1L,2L),1,decision.token(),true,true));
+        assertEquals(0,count("catalogue_duplicate_exclusion"));
+        assertTrue(service.receipt(receipt.id()).get("before_json").toString().contains("book_low_id"));
+    }
+
+    @Test void reviewedMergeOfRemainingBooksDoesNotReintroduceASeparatedMember() throws Exception {
+        mixedGroup();transaction.executeWithoutResult(status->service.exclude(1,List.of(1L,2L,3L,4L),4L));
+        var preview=service.preview(1,List.of(1L,2L,3L),1,false);assertTrue(preview.eligible(),preview.reasons().toString());
+        var receipt=transaction.execute(status->service.merge(1,List.of(1L,2L,3L),1,preview.token(),true,false));
+        assertEquals(List.of(2L,3L),receipt.removedBookIds());assertEquals(2,count("book"));
+        assertEquals(4L,jdbc.queryForObject("SELECT book_id FROM book_file WHERE id=44",Long.class));
     }
 
 }

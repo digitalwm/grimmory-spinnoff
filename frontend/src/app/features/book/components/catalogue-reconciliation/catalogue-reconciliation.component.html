@@ -58,6 +58,7 @@
             <p>{{ t('quickKeeps', {id: group.suggestedTargetBookId}) }}</p>
             <p-button [label]="t('quickMerge')" icon="pi pi-check" severity="success" (click)="quickMerge(group)" [disabled]="busy() || merging() || !!assessments()[group.key]" />
             <p-button [label]="t(assessments()[group.key] ? 'resolveIssue' : 'inspect')" icon="pi pi-eye" severity="secondary" (click)="inspect(group)" [disabled]="busy() || merging()" />
+            <p-button [label]="t('notDuplicates')" icon="pi pi-ban" severity="secondary" (click)="notDuplicates(group)" [disabled]="busy() || merging()" />
             @if (assessments()[group.key]; as assessment) {
               <p role="status">{{ t('needsReview') }}: {{ assessment.reviewReasons.join(' ') }}</p>
             }
@@ -104,6 +105,9 @@
                 (change)="selectTarget(member.bookId)" [disabled]="busy() || merging()" />
               <span><strong>#{{ member.bookId }} — {{ member.title }}</strong><br />{{ member.authors.join(', ') }}</span>
             </label>
+            @if (selectedGroup; as selected) {
+              <p-button [label]="t('separateBook')" icon="pi pi-ban" severity="secondary" (click)="notDuplicates(selected, member.bookId)" [disabled]="busy() || merging()" />
+            }
           }
         </fieldset>
         <h4>{{ t('attachedData') }}</h4>
@@ -122,6 +126,14 @@
             </div>
           }
         </details>
+        @if (canConfirmIdentity()) {
+          <p>{{ t('humanIdentityNotice') }}</p>
+          <p-button [label]="t('confirmIdentity')" icon="pi pi-user" (click)="confirmIdentity()" [disabled]="busy() || merging()" />
+        }
+        @if (preview.identityConfirmed) {<p role="status">{{ t('identityConfirmed') }}</p>}
+        @if (selectedGroup; as selected) {
+          <p-button [label]="t('notDuplicates')" icon="pi pi-ban" severity="secondary" (click)="notDuplicates(selected)" [disabled]="busy() || merging()" />
+        }
         @if (!preview.eligible) {
           <div class="review-required" role="status">
             <h4>{{ t('reviewRequired') }}</h4>

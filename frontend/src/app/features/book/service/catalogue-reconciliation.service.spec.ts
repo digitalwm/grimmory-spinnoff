@@ -35,14 +35,14 @@ describe('CatalogueReconciliationService', () => {
   it('previews exactly the selected complete group and chosen survivor', () => {
     service.preview(7, group, 2).subscribe();
     const request = http.expectOne(req => req.url.endsWith('/preview'));
-    expect(request.request.body).toEqual({libraryId: 7, bookIds: [1, 2], targetBookId: 2});
-    request.flush({...preview, targetBookId: 2});
+    expect(request.request.body).toEqual({libraryId: 7, bookIds: [1, 2], targetBookId: 2, identityConfirmed: false});
+    request.flush({...preview, targetBookId: 2, identityConfirmed: false});
   });
   it('merges using the inspected token and invalidates book caches after success', () => {
     const invalidate = vi.spyOn(harness.queryClient, 'invalidateQueries');
     service.merge(preview).subscribe();
     const request = http.expectOne(req => req.url.endsWith('/merge'));
-    expect(request.request.body).toEqual({libraryId: 7, bookIds: [1, 2], targetBookId: 1, token: 'snapshot-token', confirmed: true});
+    expect(request.request.body).toEqual({libraryId: 7, bookIds: [1, 2], targetBookId: 1, token: 'snapshot-token', confirmed: true, identityConfirmed: false});
     request.flush({id: 'receipt', targetBookId: 1, removedBookIds: [2], fileSha256: 'verified', completedAt: '2026-11-07T00:00:00Z'});
     expect(invalidate).toHaveBeenCalledWith({queryKey: bookQueryKeys.all()});
   });

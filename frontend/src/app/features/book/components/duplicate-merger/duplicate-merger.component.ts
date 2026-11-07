@@ -70,6 +70,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   reviewedGroup: CatalogueGroup | null = null;
   reviewAssessment: QuickMergeResult | null = null;
   resolvedBookIds: number[] = [];
+  separatedBookIds: number[] = [];
   readonly stopRequested = signal(false);
   readonly batchRunning = signal(false);
   reviewedGroupFinished = false;
@@ -395,6 +396,34 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
       if (group.books.some(book => changed.has(book.id))) group.dismissed = true;
     }
     if (this.pagedGroups.length === 0 && this.pageFirst > 0) this.pageFirst = Math.max(0, this.pageFirst - this.pageSize);
+  }
+
+  async notDuplicates(group: DisplayGroup, isolatedBookId?: number): Promise<void> {
+    if (this.isMerging() || this.catalogueMerging) return;
+    this.isMerging.set(true);
+    try {
+      const ids=group.books.map(book=>book.id);
+      await lastValueFrom(this.reconciliation.notDuplicates(this.libraryId,ids,isolatedBookId).pipe(takeUntil(this.destroy$)));
+      if(isolatedBookId==null)this.onExcluded(ids);else this.onSeparated(isolatedBookId);
+    } catch(err:any) {group.error=err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed');}
+    finally {this.isMerging.set(false);}
+  }
+
+  onSeparated(bookId: number): void {
+    this.separatedBookIds=[...new Set([...this.separatedBookIds,bookId])];
+    for(const group of this.groups) if(group.books.some(book=>book.id===bookId)) {
+      group.books=group.books.filter(book=>book.id!==bookId);group.reviewAssessment=undefined;group.error=undefined;
+      group.selectedForDeletion.delete(bookId);
+      if(group.selectedTargetBookId===bookId&&group.books.length)group.selectedTargetBookId=group.books[0].id;
+      if(group.books.length<2)group.dismissed=true;
+    }
+    this.reviewedGroup=null;this.reviewAssessment=null;
+  }
+
+  onExcluded(ids: number[]): void {
+    this.resolvedBookIds=[...new Set([...this.resolvedBookIds,...ids])];
+    for (const group of this.groups) if (group.books.some(book=>ids.includes(book.id))) group.dismissed=true;
+    this.reviewedGroup=null;this.reviewAssessment=null;
   }
 
   deleteGroup(group: DisplayGroup): void {

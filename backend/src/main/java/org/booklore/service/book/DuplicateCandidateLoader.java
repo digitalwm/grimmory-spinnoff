@@ -19,6 +19,8 @@ public class DuplicateCandidateLoader {
     private final ObjectMapper mapper;
     private static final int MAX_ROWS = 200_000;
 
+    public Set<DuplicateExclusions.Pair> exclusions(long libraryId) {return DuplicateExclusions.load(jdbc,libraryId);}
+
     @Transactional(readOnly = true)
     public List<BookEntity> load(long libraryId) {
         var libraries=jdbc.query("SELECT id,name,format_priority FROM library WHERE id=?",(rs,n)->LibraryEntity.builder()

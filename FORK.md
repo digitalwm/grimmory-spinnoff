@@ -50,7 +50,7 @@ embedded-metadata fallback.
 ## Session resilience during duplicate handling
 
 Duplicate scans load detached card/identity snapshots in four bounded database
-queries, then release the connection before grouping and mapping results. They do
+queries plus one read of remembered duplicate exclusions, then release the connection before grouping and mapping results. They do
 not hydrate full-library ORM relations. Direct merges query file records only for
 the selected books. Title/author connectivity uses an author index rather than
 comparing every pair in a title group.
@@ -60,6 +60,21 @@ instead of misreporting a valid session as unauthorized. Frontend refresh failur
 caused by connectivity, throttling or server errors retain the current tokens and
 route; rejected credentials still clear the session. Server-side authorization
 remains required for every protected request.
+
+## Human duplicate decisions
+
+When identity validation disagrees with the administrator, **I confirm these are
+the same book — use my target** requests a new preview bound to that decision.
+The final merge still requires its confirmation and current token; the override
+only resolves title/author identity checks, not file integrity, reading conflicts,
+permissions or device-state checks. The receipt archives the human decision.
+Changing the keeper resets identity confirmation.
+
+**Not duplicates — keep separate** stores pair exclusions in the database.
+**Separate this book from group** excludes that record from each other member
+while keeping the remaining candidates available. Both duplicate scanners honor
+these decisions, including indirect connected groups. No files or metadata are
+changed by separation. Exclusion rows are removed if either book is deleted.
 
 ## Catalogue duplicates
 
