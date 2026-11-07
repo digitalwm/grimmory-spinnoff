@@ -421,14 +421,14 @@ class CatalogueReconciliationServiceTest {
         jdbc.update("UPDATE book_metadata SET description_locked=false");jdbc.execute("ALTER TABLE book_metadata ADD COLUMN cover_locked BOOLEAN DEFAULT false");
         jdbc.update("UPDATE book_metadata SET cover_locked=true WHERE book_id=2");assertEquals("REVIEW_REQUIRED",quick(List.of(1L,2L),1).status());
     }
-    @Test void quickMergeRequiresReviewForLanguageAndAuthorCreditDifferences() throws Exception {
+    @Test void quickMergeRequiresReviewForLanguageButAllowsCompatibleAdditionalCredits() throws Exception {
         mixedGroup();jdbc.execute("ALTER TABLE book_metadata ADD COLUMN language VARCHAR(20) DEFAULT 'en'");
         jdbc.update("UPDATE book_metadata SET language='ro' WHERE book_id=4");
         var result=quick(List.of(1L,2L,3L,4L),1);assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().eligible());
         assertTrue(result.reviewReasons().stream().anyMatch(reason->reason.contains("language")));
         jdbc.update("UPDATE book_metadata SET language='en'");jdbc.update("INSERT INTO author VALUES(2,'Additional Narrator')");
         jdbc.update("INSERT INTO book_metadata_author_mapping VALUES(4,2)");result=quick(List.of(1L,2L,3L,4L),1);
-        assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.reviewReasons().stream().anyMatch(reason->reason.contains("authors")));
+        assertEquals("MERGED",result.status());assertEquals(1,count("book"));
     }
     @Test void quickMergeNeverBypassesConflictingReadingProgressOrAdministratorChecks() {
         jdbc.update("INSERT INTO user_book_progress VALUES(101,1,8,'one'),(102,2,8,'two')");
@@ -436,10 +436,10 @@ class CatalogueReconciliationServiceTest {
         assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
         user.getPermissions().setAdmin(false);assertThrows(APIException.class,()->quick(List.of(1L,2L),1));
     }
-    @Test void quickMergeTreatsSubtitleDifferencesAsAJudgmentCallEvenWhenManualMergeIsAllowed() {
+    @Test void quickMergeAllowsCompatibleSubtitleDifferencesWithoutAnExtraJudgmentCall() {
         jdbc.update("UPDATE book_metadata SET title='The Book: A Subtitle' WHERE book_id=2");
-        var result=quick(List.of(1L,2L),1);assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().eligible());
-        assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
+        var result=quick(List.of(1L,2L),1);assertEquals("MERGED",result.status());
+        assertEquals(1,count("book"));assertEquals(1,count("catalogue_reconciliation_audit"));
     }
 
     @Test void quickMergeRejectsMetadataChangedBetweenDiscoveryAndItsLockedSnapshot() {

@@ -151,15 +151,13 @@
                 }
                 <div class="group-actions">
                   <p-button
-                    [label]="(group.reviewAssessment || group.error ? 'book.catalogueReconciliation.reviewGroup' : 'book.catalogueReconciliation.quickMerge') | transloco"
+                    [label]="'book.catalogueReconciliation.quickMerge' | transloco"
                     icon="pi pi-check"
                     size="small"
                     severity="success"
                     (click)="mergeGroup(group)"
-                    [disabled]="isMerging()" />
-                  @if (!group.reviewAssessment && !group.error) {
-                    <p-button [label]="'book.catalogueReconciliation.inspect' | transloco" icon="pi pi-eye" size="small" severity="secondary" [outlined]="true" (click)="reviewGroup(group)" [disabled]="isMerging()" />
-                  }
+                    [disabled]="isMerging() || !!group.reviewAssessment" />
+                  <p-button [label]="(group.reviewAssessment || group.error ? 'book.catalogueReconciliation.resolveIssue' : 'book.catalogueReconciliation.inspect') | transloco" icon="pi pi-eye" size="small" severity="secondary" [outlined]="true" (click)="reviewGroup(group)" [disabled]="isMerging()" />
                   @if (getDeleteSelectedCount(group) > 0) {
                     <p-button
                       [label]="t('deleteSelected', { count: getDeleteSelectedCount(group) })"

@@ -32,6 +32,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
   readonly report = signal<CatalogueScan | null>(null);
   readonly inspected = signal<CataloguePreview | null>(null);
   readonly reviewReasons = signal<string[]>([]);
+  readonly assessments = signal<Record<string, QuickMergeResult>>({});
   readonly lastReceipt = signal<CatalogueReceipt | null>(null);
   readonly quarantined = signal<QuarantinedCopy[]>([]);
   search = '';
@@ -56,6 +57,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     }
     this.generation++;
     this.report.set(null);
+    this.assessments.set({});
     this.inspected.set(null);
     this.selectedGroup = null;
     this.confirmed = false;
@@ -82,12 +84,13 @@ export class CatalogueReconciliationComponent implements OnChanges {
   }
 
   quickMerge(group: CatalogueGroup): void {
-    if (!this.isAdmin() || this.busy() || this.merging()) return;
+    if (!this.isAdmin() || this.busy() || this.merging() || this.assessments()[group.key]) return;
+    this.inspected.set(null); this.confirmed = false;
     this.merging.set(true); this.mergingChange.emit(true); this.error.set(null);
     this.service.quickMerge(this.libraryId, group, group.suggestedTargetBookId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: result => {
         if (result.status === 'MERGED' && result.receipt) this.finishMerge(result.receipt);
-        else {this.merging.set(false); this.mergingChange.emit(false); this.showAssessment(group, result);}
+        else {this.merging.set(false); this.mergingChange.emit(false); this.assessments.update(current => ({...current, [group.key]: result}));}
       },
       error: err => {
         this.merging.set(false); this.mergingChange.emit(false); this.confirmed = false; this.inspected.set(null);
@@ -114,6 +117,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
       next: report => {
         if (generation !== this.generation) return;
         this.report.set(report);
+        this.assessments.set({});
         this.scannedSearch = this.search;
         this.busy.set(false);
 
@@ -122,8 +126,10 @@ export class CatalogueReconciliationComponent implements OnChanges {
     });
   }
 
-  inspect(group: CatalogueGroup, target = group.suggestedTargetBookId): void {
+  inspect(group: CatalogueGroup, target = group.suggestedTargetBookId, refresh = false): void {
     if (this.busy() || this.merging() || !this.isAdmin()) return;
+    const cached = this.assessments()[group.key];
+    if (!refresh && cached?.preview && cached.preview.targetBookId === target) {this.showAssessment(group, cached); return;}
     const changedGroup = this.selectedGroup?.key !== group.key;
     const generation = ++this.generation;
     this.selectedGroup = group;
@@ -146,7 +152,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
   }
 
   selectTarget(id: number): void {
-    if (this.selectedGroup) this.inspect(this.selectedGroup, id);
+    if (this.selectedGroup) this.inspect(this.selectedGroup, id, true);
   }
 
   merge(): void {

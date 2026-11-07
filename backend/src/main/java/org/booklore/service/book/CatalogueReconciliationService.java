@@ -148,11 +148,6 @@ public class CatalogueReconciliationService {
         List<String> reasons = new ArrayList<>(preview.reasons);
         if (!new HashSet<>(requested).equals(new HashSet<>(preview.members.stream().map(Member::bookId).toList())))
             reasons.add("Additional matching records were found outside the selected group.");
-        if (preview.members.stream().map(member -> normalise(member.title)).distinct().count() != 1)
-            reasons.add("The full titles differ; confirm the intended work before merging.");
-        if (preview.members.stream().map(member -> member.authors.stream().map(CatalogueReconciliationService::normalise)
-                .sorted().distinct().toList()).distinct().count() != 1)
-            reasons.add("The credited authors differ; review the identity of these records.");
         Map<String, Long> retainedFormats = preview.files.stream().filter(file -> file.action.equals("KEEP"))
                 .collect(java.util.stream.Collectors.groupingBy(FilePlan::bookType, java.util.stream.Collectors.counting()));
         if (retainedFormats.values().stream().anyMatch(count -> count > 1)) reasons.add("Different editions or file contents exist in the same format.");

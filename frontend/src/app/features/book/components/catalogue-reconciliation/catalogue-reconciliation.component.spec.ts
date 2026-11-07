@@ -116,9 +116,11 @@ describe('CatalogueReconciliationComponent', () => {
     expect(component.confirmed).toBe(false);expect(component.inspected()).toBeNull();expect(component.report()?.groups).toHaveLength(0);
     expect(api.preview).not.toHaveBeenCalled();expect(api.merge).not.toHaveBeenCalled();expect(api.scan).toHaveBeenCalledTimes(1);
   });
-  it('opens a complex quick-merge assessment without requesting another preview or merging', () => {
+  it('keeps a blocking assessment inline and opens it only through explicit inspect', () => {
     api.quickMerge.mockReturnValue(of({status:'REVIEW_REQUIRED',receipt:null,preview,reviewReasons:['Different editions']}));
-    component.quickMerge(group);expect(component.inspected()).toBe(preview);expect(component.confirmed).toBe(false);
+    component.quickMerge(group);expect(component.inspected()).toBeNull();expect(component.assessments()[group.key].preview).toBe(preview);
+    component.quickMerge(group);expect(api.quickMerge).toHaveBeenCalledTimes(1);
+    component.inspect(group);expect(component.inspected()).toBe(preview);expect(component.confirmed).toBe(false);
     expect(api.preview).not.toHaveBeenCalled();expect(api.merge).not.toHaveBeenCalled();
   });
   it('uses a parent assessment directly and prunes groups resolved in the other view', () => {

@@ -56,8 +56,11 @@
             <p class="file-path">{{ group.path }}</p>
             <p>{{ t('groupRecords', {count: group.members.length}) }}</p>
             <p>{{ t('quickKeeps', {id: group.suggestedTargetBookId}) }}</p>
-            <p-button [label]="t('quickMerge')" icon="pi pi-check" severity="success" (click)="quickMerge(group)" [disabled]="busy() || merging()" />
-            <p-button [label]="t('inspect')" icon="pi pi-eye" severity="secondary" (click)="inspect(group)" [disabled]="busy() || merging()" />
+            <p-button [label]="t('quickMerge')" icon="pi pi-check" severity="success" (click)="quickMerge(group)" [disabled]="busy() || merging() || !!assessments()[group.key]" />
+            <p-button [label]="t(assessments()[group.key] ? 'resolveIssue' : 'inspect')" icon="pi pi-eye" severity="secondary" (click)="inspect(group)" [disabled]="busy() || merging()" />
+            @if (assessments()[group.key]; as assessment) {
+              <p role="status">{{ t('needsReview') }}: {{ assessment.reviewReasons.join(' ') }}</p>
+            }
           </article>
         }
       </div>

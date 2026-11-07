@@ -127,9 +127,11 @@ describe('DuplicateMergerComponent', () => {
     expect(group.dismissed).toBe(true);expect(component.mode).toBe('formats');expect(confirmationService.confirm).not.toHaveBeenCalled();
     expect(component.hasScanned()).toBe(true);expect(bookFileService.findDuplicates).not.toHaveBeenCalled();
   });
-  it('opens the server-provided assessment only when the group needs review', async () => {
+  it('keeps a blocked group in the list and opens its assessment only through explicit inspect', async () => {
     component.ngOnInit();const group=display(1);component.groups=[group];reconciliation.quickMerge.mockReturnValue(of(review));
-    await component.mergeGroup(group);expect(component.mode).toBe('catalogue');expect(component.reviewAssessment).toBe(review);expect(group.dismissed).toBe(false);
+    await component.mergeGroup(group);expect(component.mode).toBe('formats');expect(component.reviewedGroup).toBeNull();expect(component.groups[0].reviewAssessment).toBe(review);expect(group.dismissed).toBe(false);
+    await component.mergeGroup(group);expect(reconciliation.quickMerge).toHaveBeenCalledTimes(1);expect(component.mode).toBe('formats');
+    component.reviewGroup(group);expect(component.mode).toBe('catalogue');expect(component.reviewAssessment).toBe(review);
   });
   it('checks a whole list after one batch confirmation and leaves complex groups for review', async () => {
     component.ngOnInit();component.groups=[display(1),display(3)];component.hasScanned.set(true);

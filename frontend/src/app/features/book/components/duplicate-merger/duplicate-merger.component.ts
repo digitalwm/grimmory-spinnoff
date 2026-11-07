@@ -314,14 +314,15 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
 
   async mergeGroup(group: DisplayGroup): Promise<void> {
     if (this.isMerging() || this.catalogueMerging || this.disposed) return;
-    if (group.reviewAssessment || group.error) {this.reviewGroup(group); return;}
+    if (group.reviewAssessment) return;
+    group.error = undefined;
     this.isMerging.set(true);
     try {
       const result = await lastValueFrom(this.reconciliation.quickMerge(this.libraryId, this.catalogueGroup(group), group.selectedTargetBookId).pipe(takeUntil(this.destroy$)));
       if (result.status === 'MERGED' && result.receipt) {
         this.onReconciled(result.receipt);
         this.messageService.add({severity:'success',summary:this.t.translate('book.catalogueReconciliation.quickMerged'),detail:this.t.translate('book.catalogueReconciliation.receipt',{id:result.receipt.id})});
-      } else {group.reviewAssessment = result; this.reviewGroup(group);}
+      } else {group.reviewAssessment = result;}
     } catch (err: any) {
       group.error = err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed');
       this.messageService.add({severity:'error',summary:this.t.translate('book.catalogueReconciliation.operationFailed'),detail:group.error});
