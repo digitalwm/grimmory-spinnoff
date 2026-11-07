@@ -23,10 +23,10 @@
       <p-button [label]="'book.catalogueReconciliation.formatsTab' | transloco" severity="secondary"
         [outlined]="mode !== 'formats'" (click)="mode = 'formats'" [disabled]="catalogueMerging || isMerging() || isScanning()" />
       <p-button [label]="'book.catalogueReconciliation.catalogueTab' | transloco" severity="secondary"
-        [outlined]="mode !== 'catalogue'" (click)="mode = 'catalogue'" [disabled]="catalogueMerging || isMerging() || isScanning()" />
+        [outlined]="mode !== 'catalogue'" (click)="reviewedGroup = null; mode = 'catalogue'" [disabled]="catalogueMerging || isMerging() || isScanning()" />
     </div>
     @if (mode === 'catalogue') {
-      <app-catalogue-reconciliation [libraryId]="libraryId" (mergingChange)="catalogueMerging = $event" />
+      <app-catalogue-reconciliation [libraryId]="libraryId" [reviewGroup]="reviewedGroup" (reconciled)="onReconciled($event)" (mergingChange)="catalogueMerging = $event" />
     } @else {
 
     <!-- Preset Mode Selector -->
@@ -84,17 +84,10 @@
           [loading]="isScanning()" />
       </div>
       <div class="action-bar-right">
-        <div class="delete-option">
-          <p-checkbox
-            [(ngModel)]="moveFiles"
-            [binary]="true"
-            inputId="moveFiles"
-            [disabled]="isMerging()" />
-          <label for="moveFiles">{{ 'book.fileAttacher.moveFilesLabel' | transloco }}</label>
-        </div>
+        <p>{{ 'book.catalogueReconciliation.formatsNotice' | transloco }}</p>
         @if (activeGroups.length > 0) {
           <p-button
-            [label]="t('mergeAll', { count: activeGroups.length })"
+            [label]="'book.catalogueReconciliation.reviewNext' | transloco"
             icon="pi pi-check-circle"
             severity="success"
             (click)="mergeAll()"
@@ -151,7 +144,7 @@
                 }
                 <div class="group-actions">
                   <p-button
-                    [label]="t('merge')"
+                    [label]="'book.catalogueReconciliation.reviewGroup' | transloco"
                     icon="pi pi-check"
                     size="small"
                     severity="success"

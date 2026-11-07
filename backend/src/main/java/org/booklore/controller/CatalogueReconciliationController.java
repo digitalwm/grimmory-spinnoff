@@ -20,14 +20,15 @@ import java.util.Map;
 @PreAuthorize("@securityUtil.isAdmin()")
 public class CatalogueReconciliationController {
     private final CatalogueReconciliationService service;
+    private final org.booklore.service.book.CatalogueQuarantineService quarantine;
     public record InspectRequest(@NotNull Long libraryId, @NotEmpty @Size(min = 2, max = 20) List<@NotNull Long> bookIds, @NotNull Long targetBookId) {}
     public record MergeRequest(@NotNull Long libraryId, @NotEmpty @Size(min = 2, max = 20) List<@NotNull Long> bookIds,
                                @NotNull Long targetBookId, @NotNull String token, boolean confirmed) {}
 
     @GetMapping
     public ResponseEntity<CatalogueReconciliationService.Scan> scan(@RequestParam long libraryId,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.scan(libraryId, page, size));
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size, @RequestParam(required = false) String search) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.scan(libraryId, page, size, search));
     }
     @PostMapping("/preview")
     public ResponseEntity<CatalogueReconciliationService.Preview> preview(@RequestBody @Valid InspectRequest request) {
@@ -38,6 +39,15 @@ public class CatalogueReconciliationController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.merge(request.libraryId, request.bookIds,
                 request.targetBookId, request.token, request.confirmed));
     }
+    @GetMapping("/quarantine/{id}/file")
+    public ResponseEntity<org.springframework.core.io.Resource> quarantinedFile(@PathVariable String id) {
+        var file = quarantine.open(id);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        org.springframework.http.ContentDisposition.attachment().filename(file.name(), java.nio.charset.StandardCharsets.UTF_8).build().toString())
+                .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM).body(file.resource());
+    }
+
     @GetMapping("/receipts/{id}")
     public ResponseEntity<Map<String, Object>> receipt(@PathVariable String id) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.receipt(id));

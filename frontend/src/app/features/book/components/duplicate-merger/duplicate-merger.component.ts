@@ -8,7 +8,7 @@ import {SelectButton} from '@openng/optimus-ui/selectbutton';
 import {ProgressBar} from '@openng/optimus-ui/progressbar';
 import {Tag} from '@openng/optimus-ui/tag';
 import {Paginator, PaginatorState} from '@openng/optimus-ui/paginator';
-import {lastValueFrom, Subject, takeUntil} from 'rxjs';
+import {Subject, takeUntil} from 'rxjs';
 import {BookFileService} from '../../service/book-file.service';
 import {BookService} from '../../service/book.service';
 import {Book, DuplicateDetectionRequest, DuplicateGroup} from '../../model/book.model';
@@ -17,6 +17,7 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
 import {CoverComponent} from '../../../../shared/components/cover/cover.component';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {AppSettingsService} from '../../../../shared/service/app-settings.service';
+import {CatalogueGroup, CatalogueReceipt} from '../../service/catalogue-reconciliation.service';
 import {CatalogueReconciliationComponent} from '../catalogue-reconciliation/catalogue-reconciliation.component';
 
 type PresetMode = 'strict' | 'balanced' | 'aggressive' | 'custom';
@@ -61,6 +62,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   libraryId!: number;
   mode: 'formats' | 'catalogue' = 'formats';
   catalogueMerging = false;
+  reviewedGroup: CatalogueGroup | null = null;
   presetMode: PresetMode = 'balanced';
   showAdvanced = false;
 
@@ -292,78 +294,25 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
     }
   }
 
-  async mergeGroup(group: DisplayGroup): Promise<void> {
-    const targetId = group.selectedTargetBookId;
-    const sourceIds = group.books
-      .filter(b => b.id !== targetId)
-      .map(b => b.id);
-
-    if (sourceIds.length === 0) return;
-
-    group.dismissed = true;
-    try {
-      await lastValueFrom(this.bookFileService.attachBookFiles(targetId, sourceIds, this.moveFiles)
-        .pipe(takeUntil(this.destroy$)), {defaultValue: undefined});
-    } catch {
-      group.dismissed = false;
-      this.messageService.add({
-        severity: 'error',
-        summary: this.t.translate('book.duplicateMerger.toast.mergeFailedSummary'),
-        detail: this.t.translate('book.duplicateMerger.toast.mergeFailedDetail'),
-      });
-    }
+  mergeGroup(group: DisplayGroup): void {
+    this.reviewedGroup = {
+      key: group.books.map(book => book.id).sort((a, b) => a - b).join('-'),
+      path: this.getBookFilePath(group.books[0]),
+      suggestedTargetBookId: group.selectedTargetBookId,
+      members: group.books.map(book => ({bookId: book.id, fileId: 0, title: book.metadata?.title || '', authors: [], storedHash: null})),
+    };
+    this.mode = 'catalogue';
   }
 
-  async mergeAll(): Promise<void> {
-    const toMerge = this.activeGroups;
-    if (toMerge.length === 0) return;
+  mergeAll(): void {
+    // Every group now has a verified plan and a separate explicit confirmation.
+    const first = this.activeGroups[0];
+    if (first) this.mergeGroup(first);
+  }
 
-    this.isMerging.set(true);
-    this.mergeTotal.set(toMerge.length);
-    this.mergeProgress.set(0);
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const group of toMerge) {
-      const targetId = group.selectedTargetBookId;
-      const sourceIds = group.books
-        .filter(b => b.id !== targetId)
-        .map(b => b.id);
-
-      if (sourceIds.length === 0) {
-        group.dismissed = true;
-        this.mergeProgress.update((p) => p + 1);
-        continue;
-      }
-
-      try {
-        await lastValueFrom(this.bookFileService.attachBookFiles(targetId, sourceIds, this.moveFiles)
-          .pipe(takeUntil(this.destroy$)), {defaultValue: undefined});
-        group.dismissed = true;
-        successCount++;
-      } catch {
-        failCount++;
-      }
-      this.mergeProgress.update((p) => p + 1);
-    }
-
-    this.isMerging.set(false);
-
-    if (successCount > 0) {
-      this.messageService.add({
-        severity: 'success',
-        summary: this.t.translate('book.duplicateMerger.toast.mergeSuccessSummary'),
-        detail: this.t.translate('book.duplicateMerger.toast.mergeSuccessDetail', {count: successCount}),
-      });
-    }
-    if (failCount > 0) {
-      this.messageService.add({
-        severity: 'error',
-        summary: this.t.translate('book.duplicateMerger.toast.mergeFailedSummary'),
-        detail: this.t.translate('book.duplicateMerger.toast.mergePartialDetail', {success: successCount, failed: failCount}),
-      });
-    }
+  onReconciled(_receipt: CatalogueReceipt): void {
+    // The retained book can now have additional formats; a fresh scan replaces stale detector results.
+    this.groups = []; this.hasScanned.set(false); this.pageFirst = 0;
   }
 
   deleteGroup(group: DisplayGroup): void {

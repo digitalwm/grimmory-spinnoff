@@ -82,4 +82,19 @@ describe('DuplicateMergerComponent', () => {
     expect(group.dismissed).toBe(true);
     expect(changeDetectorRef.markForCheck).toHaveBeenCalledOnce();
   });
+  it('routes a mixed group to one reviewed preview without attaching or deleting anything', () => {
+    component.ngOnInit(); const group = {...createGroup([createBook(1),createBook(2),createBook(3)]),
+      selectedTargetBookId: 2,dismissed: false,selectedForDeletion:new Set<number>()};
+    component.mergeGroup(group);
+    expect(component.mode).toBe('catalogue'); expect(component.reviewedGroup?.suggestedTargetBookId).toBe(2);
+    expect(component.reviewedGroup?.members.map(member=>member.bookId)).toEqual([1,2,3]);
+    expect(group.dismissed).toBe(false);
+  });
+  it('reviews the next group without performing an automatic bulk merge', () => {
+    component.ngOnInit(); component.groups=[{...createGroup([createBook(1),createBook(2)]),
+      selectedTargetBookId:1,dismissed:false,selectedForDeletion:new Set<number>()}];
+    component.mergeAll(); expect(component.mode).toBe('catalogue'); expect(component.reviewedGroup?.members.length).toBe(2);
+    expect(component.groups[0].dismissed).toBe(false);
+  });
+
 });

@@ -9,7 +9,7 @@ import {CatalogueReconciliationComponent} from './catalogue-reconciliation.compo
 
 describe('CatalogueReconciliationComponent', () => {
   const user = signal({permissions: {admin: true}});
-  const api = {scan: vi.fn(), preview: vi.fn(), merge: vi.fn(), receipt: vi.fn(), receipts: vi.fn()};
+  const api = {scan: vi.fn(), preview: vi.fn(), merge: vi.fn(), receipt: vi.fn(), receipts: vi.fn(), quarantinedFile: vi.fn()};
   const group: CatalogueGroup = {key: 'shared', path: '/books/shared.epub', suggestedTargetBookId: 1,
     members: [{bookId: 1, fileId: 11, title: 'Book', authors: ['Ada'], storedHash: 'same'},
       {bookId: 2, fileId: 22, title: 'Book', authors: ['Ada'], storedHash: 'same'}]};
@@ -20,7 +20,7 @@ describe('CatalogueReconciliationComponent', () => {
 
   beforeEach(() => {
     vi.resetAllMocks(); user.set({permissions: {admin: true}});
-    api.scan.mockReturnValue(of(report)); api.preview.mockReturnValue(of(preview));
+    api.scan.mockReturnValue(of(report)); api.preview.mockReturnValue(of(preview)); api.receipt.mockReturnValue(of({quarantine: []}));
     TestBed.configureTestingModule({providers: [
       {provide: CatalogueReconciliationService, useValue: api},
       {provide: UserService, useValue: {currentUser: user}},
@@ -75,7 +75,21 @@ describe('CatalogueReconciliationComponent', () => {
     pending.next(preview); pending.complete();
     expect(component.inspected()).toBeNull(); expect(component.report()).toBeNull();
   });
-  it('does not request reconciliation data for a non-administrator', () => {
+  it('opens the selected formats group directly as a read-only preview', () => {
+    component.reviewGroup = group; component.ngOnChanges();
+    expect(api.preview).toHaveBeenCalledExactlyOnceWith(7, group, 1);
+    expect(api.scan).not.toHaveBeenCalled(); expect(api.merge).not.toHaveBeenCalled();
+  });
+  it('includes title search in the bounded scan', () => {
+    component.search = 'A Tough Man to Tame'; component.scan();
+    expect(api.scan).toHaveBeenCalledExactlyOnceWith(7, 0, 'A Tough Man to Tame'); expect(api.merge).not.toHaveBeenCalled();
+  });
+  it('shows the durable quarantine state after a successful merge', () => {
+    api.receipt.mockReturnValue(of({quarantine:[{id:'copy',state:'QUARANTINED',purge_after:'2026-12-07'}]}));
+    component.loadQuarantine('receipt'); expect(component.quarantined()[0].id).toBe('copy');
+    expect(api.merge).not.toHaveBeenCalled();
+  });
+  it('does not request reconciliation data for a non-administrator' , () => {
     user.set({permissions: {admin: false}});
     component.scan(); component.inspect(group); component.loadHistory();
     expect(api.scan).not.toHaveBeenCalled(); expect(api.preview).not.toHaveBeenCalled(); expect(api.receipts).not.toHaveBeenCalled();

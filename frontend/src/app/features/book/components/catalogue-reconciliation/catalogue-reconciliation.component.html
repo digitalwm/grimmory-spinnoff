@@ -6,6 +6,9 @@
   @if (!isAdmin()) {
     <p role="status">{{ t('adminOnly') }}</p>
   } @else {
+    <label for="catalogue-search">{{ t('searchLabel') }}</label>
+    <input id="catalogue-search" class="catalogue-search" type="search" [(ngModel)]="search" maxlength="200"
+      [placeholder]="t('searchPlaceholder')" [disabled]="busy() || merging()" (keyup.enter)="scan()" />
     <div class="toolbar">
       <p-button [label]="t('scan')" icon="pi pi-search" (click)="scan()" [loading]="busy()" [disabled]="busy() || merging()" />
       @if (report(); as result) {
@@ -20,6 +23,7 @@
         <div class="toolbar">
           <span>#{{ receipt.targetBookId }} · {{ receipt.completedAt }}</span>
           <p-button [label]="t('downloadReceipt')" severity="secondary" (click)="downloadReceipt(receipt.id)" />
+          <p-button [label]="t('viewQuarantine')" severity="secondary" (click)="loadQuarantine(receipt.id)" />
         </div>
       }
     </details>
@@ -29,6 +33,19 @@
         <p>{{ t('receipt', {id: receipt.id}) }}</p>
         <p-button [label]="t('downloadReceipt')" icon="pi pi-download" severity="secondary" (click)="downloadReceipt()" />
       </div>
+    }
+    @if (quarantined().length) {
+      <section class="preview" [attr.aria-label]="t('quarantineTitle')">
+        <h3>{{ t('quarantineTitle') }}</h3>
+        @for (copy of quarantined(); track copy.id) {
+          <article class="difference">
+            <p class="file-path">{{ copy.original_path }}</p>
+            <p>{{ copy.state }} · {{ copy.purge_after || t('noExpiry') }}</p>
+            @if (copy.detail) {<p>{{ copy.detail }}</p>}
+            <p-button [label]="t('recoverCopy')" icon="pi pi-download" severity="secondary" (click)="downloadCopy(copy)" [disabled]="copy.state !== 'QUARANTINED'" />
+          </article>
+        }
+      </section>
     }
     @if (report(); as result) {
       @if (result.totalGroups === 0) {<p>{{ t('empty') }}</p>}
@@ -57,6 +74,17 @@
         @if (preview.fileSha256) {
           <p>{{ t('verifiedFile', {bytes: preview.fileBytes}) }}</p>
           <details><summary>{{ t('fileFingerprint') }}</summary><code>{{ preview.fileSha256 }}</code></details>
+        }
+        @if (preview.files; as files) {
+          <h4>{{ t('filePlan') }}</h4>
+          @for (file of files; track file.fileId) {
+            <article class="difference">
+              <strong>{{ file.bookType }} · {{ t('fileActions.' + file.action) }}</strong>
+              <p class="file-path">{{ file.path }}</p>
+              @if (file.action !== 'KEEP') {<p class="file-path">{{ t('retainedCopy') }}: {{ file.retainedPath }}</p>}
+            </article>
+          }
+          <p>{{ preview.quarantineRetentionDays ? t('retention', {days: preview.quarantineRetentionDays}) : t('retentionDisabled') }}</p>
         }
         <fieldset>
           <legend>{{ t('chooseSurvivor') }}</legend>

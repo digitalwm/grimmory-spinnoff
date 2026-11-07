@@ -33,6 +33,7 @@ class CatalogueReconciliationServiceTest {
     private TransactionTemplate transaction;
     private Path file;
     private BookLoreUser user;
+    private CatalogueQuarantineService quarantine;
 
     @BeforeEach void setUp() throws Exception {
         var dataSource = new DriverManagerDataSource("jdbc:h2:mem:reconcile_" + UUID.randomUUID()
@@ -44,7 +45,7 @@ class CatalogueReconciliationServiceTest {
                 "CREATE TABLE library(id BIGINT PRIMARY KEY)",
                 "CREATE TABLE library_path(id BIGINT PRIMARY KEY,path VARCHAR(2000))",
                 "CREATE TABLE book(id BIGINT PRIMARY KEY,library_id BIGINT,library_path_id BIGINT,metadata_match_score FLOAT,is_physical BOOLEAN,deleted BOOLEAN)",
-                "CREATE TABLE book_file(id BIGINT PRIMARY KEY,book_id BIGINT NOT NULL REFERENCES book(id) ON DELETE CASCADE,file_sub_path VARCHAR(512),file_name VARCHAR(1000),current_hash VARCHAR(128))",
+                "CREATE TABLE book_file(id BIGINT PRIMARY KEY,book_id BIGINT NOT NULL REFERENCES book(id) ON DELETE CASCADE,file_sub_path VARCHAR(512),file_name VARCHAR(1000),current_hash VARCHAR(128),book_type VARCHAR(20) DEFAULT 'EPUB',is_book BOOLEAN DEFAULT true,is_folder_based BOOLEAN DEFAULT false)",
                 "CREATE TABLE book_metadata(book_id BIGINT PRIMARY KEY REFERENCES book(id) ON DELETE CASCADE,title VARCHAR(1000),description VARCHAR(5000))",
                 "CREATE TABLE author(id BIGINT PRIMARY KEY,name VARCHAR(255))",
                 "CREATE TABLE book_metadata_author_mapping(book_id BIGINT REFERENCES book_metadata(book_id) ON DELETE CASCADE,author_id BIGINT REFERENCES author(id),PRIMARY KEY(book_id,author_id))",
@@ -53,18 +54,26 @@ class CatalogueReconciliationServiceTest {
                 "CREATE TABLE user_book_file_progress(id BIGINT PRIMARY KEY,book_file_id BIGINT REFERENCES book_file(id) ON DELETE CASCADE,user_id BIGINT,position_data VARCHAR(1000),UNIQUE(user_id,book_file_id))",
                 "CREATE TABLE book_marks(id BIGINT PRIMARY KEY,book_id BIGINT REFERENCES book(id) ON DELETE CASCADE,user_id BIGINT,title VARCHAR(1000))",
                 "CREATE TABLE catalogue_reconciliation_audit(id VARCHAR(36) PRIMARY KEY,user_id BIGINT,library_id BIGINT,target_book_id BIGINT,created_at TIMESTAMP,file_path VARCHAR(2000),file_sha256 VARCHAR(64),before_json CLOB,after_json CLOB)")) jdbc.execute(ddl);
+        jdbc.execute("CREATE TABLE catalogue_reconciliation_lock(id INT PRIMARY KEY)");
+        jdbc.update("INSERT INTO catalogue_reconciliation_lock VALUES(1)");
+        jdbc.execute("CREATE TABLE catalogue_quarantine(id VARCHAR(36) PRIMARY KEY,receipt_id VARCHAR(36),library_id BIGINT,original_path VARCHAR(2000),quarantine_path VARCHAR(2000),retained_path VARCHAR(2000),retained_file_id BIGINT,file_sha256 VARCHAR(64),state VARCHAR(32),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,purge_after TIMESTAMP,completed_at TIMESTAMP,detail VARCHAR(4000))");
         jdbc.update("INSERT INTO library VALUES(1)");
         jdbc.update("INSERT INTO library_path VALUES(1,?)", folder.toString());
         jdbc.update("INSERT INTO book VALUES(1,1,1,80,false,false),(2,1,1,70,false,false)");
-        jdbc.update("INSERT INTO book_file VALUES(11,1,'','shared.epub','same-hash'),(22,2,'','shared.epub','same-hash')");
+        jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash) VALUES(11,1,'','shared.epub','same-hash'),(22,2,'','shared.epub','same-hash')");
         jdbc.update("INSERT INTO book_metadata VALUES(1,'The Book','Chosen description'),(2,'The Book','Original source description')");
         jdbc.update("INSERT INTO author VALUES(1,'Ada Author')");
         jdbc.update("INSERT INTO book_metadata_author_mapping VALUES(1,1),(2,1)");
         var permissions = new BookLoreUser.UserPermissions(); permissions.setAdmin(true);
         user = BookLoreUser.builder().id(7L).permissions(permissions).build();
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
+        var proxy = new org.springframework.aop.framework.ProxyFactory(new CatalogueQuarantineService(jdbc));
+        proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(new DataSourceTransactionManager(dataSource),
+                new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+        quarantine = (CatalogueQuarantineService) proxy.getProxy();
         service = new CatalogueReconciliationService(jdbc, new CatalogueReconciliationStore(jdbc),
-                new ObjectMapper(), mock(AuditService.class), mock(NotificationService.class));
+                new ObjectMapper(), mock(AuditService.class), mock(NotificationService.class), quarantine,
+                mock(org.booklore.service.monitoring.MonitoringRegistrationService.class));
         file = folder.resolve("shared.epub"); Files.writeString(file, "Original physical EPUB bytes");
         jdbc.update("UPDATE book_file SET current_hash=?", org.booklore.service.file.FileFingerprint.generateHash(file));
     }
@@ -147,7 +156,7 @@ class CatalogueReconciliationServiceTest {
     @Test void changedGroupMembershipCannotBeApplied() {
         var preview = preview();
         jdbc.update("INSERT INTO book VALUES(3,1,1,70,false,false)");
-        jdbc.update("INSERT INTO book_file VALUES(33,3,'','shared.epub','same-hash')");
+        jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash) VALUES(33,3,'','shared.epub','same-hash')");
         assertThrows(APIException.class, () -> merge(preview)); assertEquals(3, count("book"));
     }
 
@@ -165,9 +174,9 @@ class CatalogueReconciliationServiceTest {
         assertFalse(preview().eligible()); assertEquals(2, count("book"));
     }
 
-    @Test void sourceWithAdditionalFilesRequiresSeparateReview() {
-        jdbc.update("INSERT INTO book_file VALUES(23,2,'','other.epub','another-hash')");
-        assertThrows(APIException.class, this::preview); assertEquals(3, count("book_file"));
+    @Test void missingAdditionalFileRequiresReview() {
+        jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash) VALUES(23,2,'','other.epub','another-hash')");
+        assertFalse(preview().eligible()); assertEquals(3, count("book_file"));
     }
 
     @Test void administratorAndExplicitConfirmationAreRequired() {
@@ -185,9 +194,10 @@ class CatalogueReconciliationServiceTest {
         assertFalse(preview().eligible()); assertEquals(2, count("user_book_file_progress"));
     }
 
-    @Test void caseDistinctPathsAreNotGrouped() {
+    @Test void caseDistinctPathsAreStillCandidatesButMustVerifyEachActualFile() {
         jdbc.update("UPDATE book_file SET file_name='SHARED.epub' WHERE id=22");
-        assertEquals(0, service.scan(1, 0, 20).totalGroups());
+        assertEquals(1, service.scan(1, 0, 20).totalGroups());
+        assertFalse(preview().eligible());
     }
     @Test void matchingStoredHashesAreNotEnoughIfThePhysicalFingerprintHasDrifted() {
         jdbc.update("UPDATE book_file SET current_hash='outdated-for-both-records'");
@@ -200,4 +210,168 @@ class CatalogueReconciliationServiceTest {
         var preview = preview(); merge(preview);
         assertThrows(APIException.class, () -> merge(preview)); assertEquals(1, count("catalogue_reconciliation_audit"));
     }
+
+    private void mixedGroup() throws Exception {
+        Path pdf = folder.resolve("shared.pdf"); Files.move(file, pdf); file = pdf;
+        jdbc.update("UPDATE book_file SET file_name='shared.pdf',book_type='PDF'");
+        jdbc.update("INSERT INTO book VALUES(3,1,1,60,false,false),(4,1,1,90,false,false)");
+        jdbc.update("INSERT INTO book_metadata VALUES(3,'The Book','Third metadata'),(4,'The Book','EPUB metadata')");
+        jdbc.update("INSERT INTO book_metadata_author_mapping VALUES(3,1),(4,1)");
+        Files.createDirectories(folder.resolve("another"));
+        Files.copy(file, folder.resolve("another/shared.pdf"));
+        Files.writeString(folder.resolve("different.epub"), "A distinct EPUB format worth retaining");
+        jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash,book_type) VALUES(33,3,'another','shared.pdf',?,'PDF'),(44,4,'','different.epub',?,'EPUB')",
+                org.booklore.service.file.FileFingerprint.generateHash(folder.resolve("another/shared.pdf")),
+                org.booklore.service.file.FileFingerprint.generateHash(folder.resolve("different.epub")));
+    }
+    private CatalogueReconciliationService.Preview mixedPreview(long keeper) {return service.preview(1,List.of(1L,2L,3L,4L),keeper);}
+    private CatalogueReconciliationService.Receipt apply(CatalogueReconciliationService.Preview preview) {
+        return transaction.execute(status -> service.merge(1,preview.members().stream().map(CatalogueReconciliationService.Member::bookId).toList(),
+                preview.targetBookId(),preview.token(),true));
+    }
+
+    @Test void mixedSharedPdfSeparateIdenticalCopyAndEpubMergeInOneReviewedOperation() throws Exception {
+        mixedGroup();
+        jdbc.update("INSERT INTO user_book_file_progress VALUES(101,22,7,'pdf-position'),(102,44,7,'epub-position')");
+        var preview=mixedPreview(1); assertTrue(preview.eligible(),preview.reasons().toString());
+        assertEquals(4,preview.members().size());
+        assertEquals(2,preview.files().stream().filter(plan -> plan.action().equals("KEEP")).count());
+        assertEquals(1,preview.files().stream().filter(plan -> plan.action().equals("SHARED_REFERENCE")).count());
+        assertEquals(1,preview.files().stream().filter(plan -> plan.action().equals("QUARANTINE_COPY")).count());
+        var receipt=apply(preview);
+        assertEquals(1,count("book")); assertEquals(2,count("book_file"));
+        assertEquals(1L,jdbc.queryForObject("SELECT book_id FROM book_file WHERE id=44",Long.class));
+        assertEquals(11L,jdbc.queryForObject("SELECT book_file_id FROM user_book_file_progress WHERE id=101",Long.class));
+        assertEquals(44L,jdbc.queryForObject("SELECT book_file_id FROM user_book_file_progress WHERE id=102",Long.class));
+        assertTrue(Files.exists(file)); assertTrue(Files.exists(folder.resolve("different.epub")));
+        assertFalse(Files.exists(folder.resolve("another/shared.pdf")));
+        var entry=quarantine.entries(receipt.id()).getFirst();
+        assertEquals("QUARANTINED",entry.get("state"));
+        assertArrayEquals(Files.readAllBytes(file),Files.readAllBytes(Path.of(entry.get("quarantine_path"))));
+        assertNotNull(entry.get("purge_after")); assertEquals(30,receipt.quarantineRetentionDays());
+        try(var input=quarantine.open(entry.get("id")).resource().getInputStream()) {assertArrayEquals(Files.readAllBytes(file),input.readAllBytes());}
+    }
+
+    @Test void epubKeeperRetainsPdfAndReassignsAllFilesBeforeDeletingSourceRecords() throws Exception {
+        mixedGroup(); var p=mixedPreview(4); assertTrue(p.eligible(),p.reasons().toString()); apply(p);
+        assertEquals(1,count("book")); assertEquals(2,count("book_file"));
+        assertEquals(4L,jdbc.queryForObject("SELECT book_id FROM book_file WHERE id=11",Long.class));
+        assertEquals("EPUB metadata",jdbc.queryForObject("SELECT description FROM book_metadata WHERE book_id=4",String.class));
+    }
+
+    @Test void incompleteSelectionExpandsSharedReferencesAndRequiresConfirmingTheExpandedPreview() throws Exception {
+        mixedGroup(); var p=service.preview(1,List.of(1L,4L),1);
+        assertEquals(List.of(1L,2L,3L,4L),p.members().stream().map(CatalogueReconciliationService.Member::bookId).toList());
+        assertTrue(p.eligible(),p.reasons().toString());
+        assertThrows(APIException.class,()->transaction.execute(status->service.merge(1,List.of(1L,4L),1,p.token(),true)));
+        apply(p); assertEquals(1,count("book")); assertFalse(Files.exists(folder.resolve("another/shared.pdf")));
+    }
+
+    @Test void sourceWithSeveralVerifiedFormatsTransfersEveryUniqueFormat() throws Exception {
+        mixedGroup(); jdbc.update("UPDATE book_file SET book_id=2 WHERE id=44");
+        jdbc.update("DELETE FROM book_metadata_author_mapping WHERE book_id=4");
+        jdbc.update("DELETE FROM book_metadata WHERE book_id=4"); jdbc.update("DELETE FROM book WHERE id=4");
+        var p=service.preview(1,List.of(1L,2L,3L),1); assertTrue(p.eligible(),p.reasons().toString()); apply(p);
+        assertEquals(1,count("book")); assertEquals(2,count("book_file")); assertTrue(Files.exists(folder.resolve("different.epub")));
+    }
+
+    @Test void sameFormatWithDifferentBytesIsRetainedAsAnotherEditionInsteadOfQuarantined() throws Exception {
+        mixedGroup(); Files.writeString(folder.resolve("another/shared.pdf"),"A different PDF edition");
+        jdbc.update("UPDATE book_file SET current_hash=? WHERE id=33",org.booklore.service.file.FileFingerprint.generateHash(folder.resolve("another/shared.pdf")));
+        var p=mixedPreview(1); assertTrue(p.eligible(),p.reasons().toString());
+        assertEquals(0,p.files().stream().filter(plan->plan.action().equals("QUARANTINE_COPY")).count()); apply(p);
+        assertEquals(3,count("book_file")); assertEquals(0,count("catalogue_quarantine")); assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
+    }
+
+    @Test void mixedMergeAuditFailureRestoresMovedCopyAndRollsBackEveryCatalogueChange() throws Exception {
+        mixedGroup(); var p=mixedPreview(1); jdbc.execute("DROP TABLE catalogue_reconciliation_audit");
+        assertThrows(RuntimeException.class,()->apply(p));
+        assertEquals(4,count("book")); assertEquals(4,count("book_file")); assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
+        assertEquals("RESTORED",jdbc.queryForObject("SELECT state FROM catalogue_quarantine",String.class));
+    }
+
+    @Test void changedSeparateCopyMakesTheWholeMixedPreviewStale() throws Exception {
+        mixedGroup(); var p=mixedPreview(1); Files.writeString(folder.resolve("another/shared.pdf"),"Changed copy");
+        assertThrows(APIException.class,()->apply(p)); assertEquals(4,count("book")); assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
+    }
+
+    @Test void conflictingFileProgressIsBlockedWhileDistinctFormatsCanKeepSeparatePositions() throws Exception {
+        mixedGroup(); jdbc.update("INSERT INTO user_book_file_progress VALUES(101,11,7,'pdf-one'),(102,33,7,'pdf-two')");
+        var p=mixedPreview(1); assertFalse(p.eligible()); assertThrows(APIException.class,()->apply(p)); assertEquals(4,count("book"));
+    }
+
+    @Test void quarantiningAFileReferencedOutsideTheSelectedLibraryIsBlocked() throws Exception {
+        mixedGroup(); jdbc.update("INSERT INTO library VALUES(2)");
+        jdbc.update("INSERT INTO book VALUES(9,2,1,0,false,false)");
+        jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash,book_type) VALUES(99,9,'another','shared.pdf',?,'PDF')",org.booklore.service.file.FileFingerprint.generateHash(file));
+        var p=mixedPreview(1); assertFalse(p.eligible()); assertTrue(p.reasons().stream().anyMatch(reason->reason.contains("outside this group")));
+    }
+
+    @Test void candidateSearchFindsAllCopiesAndFormatsWithoutModifyingAnything() throws Exception {
+        mixedGroup(); var scan=service.scan(1,0,20,"THE BOOK");
+        assertEquals(1,scan.totalGroups()); assertEquals(4,scan.groups().getFirst().members().size());
+        assertEquals(0,service.scan(1,0,20,"not this title").totalGroups()); assertEquals(4,count("book")); assertEquals(0,count("catalogue_quarantine"));
+    }
+
+    @Test void retentionPurgesOnlyTheExpiredVerifiedCopyWhileTheRegisteredKeeperRemainsIntact() throws Exception {
+        mixedGroup(); var receipt=apply(mixedPreview(1)); var entry=quarantine.entries(receipt.id()).getFirst();
+        quarantine.maintain(); assertTrue(Files.exists(Path.of(entry.get("quarantine_path"))));
+        jdbc.update("UPDATE catalogue_quarantine SET purge_after=TIMESTAMP '2000-01-01 00:00:00'"); quarantine.maintain();
+        assertFalse(Files.exists(Path.of(entry.get("quarantine_path")))); assertTrue(Files.exists(file));
+        assertEquals("PURGED",quarantine.entries(receipt.id()).getFirst().get("state"));
+        assertNotNull(service.receipt(receipt.id()).get("before_json"));
+    }
+
+    @Test void retentionPreservesBackupIfTheKeeperIsMissingOrChangedOrUnregistered() throws Exception {
+        mixedGroup(); var receipt=apply(mixedPreview(1)); var entry=quarantine.entries(receipt.id()).getFirst();
+        jdbc.update("UPDATE catalogue_quarantine SET purge_after=TIMESTAMP '2000-01-01 00:00:00'");
+        byte[] original=Files.readAllBytes(file); Files.delete(file); quarantine.maintain(); assertTrue(Files.exists(Path.of(entry.get("quarantine_path"))));
+        Files.writeString(file,"Changed keeper"); quarantine.maintain(); assertTrue(Files.exists(Path.of(entry.get("quarantine_path"))));
+        Files.write(file,original); jdbc.update("DELETE FROM book_file WHERE id=11"); quarantine.maintain();
+        assertEquals("QUARANTINED",quarantine.entries(receipt.id()).getFirst().get("state")); assertTrue(Files.exists(Path.of(entry.get("quarantine_path"))));
+    }
+
+    @Test void retentionNeverDeletesAnAlteredQuarantineFile() throws Exception {
+        mixedGroup(); var receipt=apply(mixedPreview(1)); var entry=quarantine.entries(receipt.id()).getFirst();
+        Path copy=Path.of(entry.get("quarantine_path")); Files.writeString(copy,"Altered backup");
+        jdbc.update("UPDATE catalogue_quarantine SET purge_after=TIMESTAMP '2000-01-01 00:00:00'"); quarantine.maintain();
+        assertEquals("Altered backup",Files.readString(copy));
+        assertTrue(quarantine.entries(receipt.id()).getFirst().get("detail").contains("checksum changed"));
+    }
+
+    @Test void retentionZeroKeepsQuarantinedCopiesIndefinitely() throws Exception {
+        mixedGroup(); CatalogueQuarantineService raw = org.springframework.test.util.AopTestUtils.getTargetObject(quarantine);
+        org.springframework.test.util.ReflectionTestUtils.setField(raw,"retentionDays",0);
+        var receipt=apply(mixedPreview(1)); var entry=quarantine.entries(receipt.id()).getFirst(); assertNull(entry.get("purge_after"));
+        quarantine.maintain(); assertEquals("QUARANTINED",quarantine.entries(receipt.id()).getFirst().get("state"));
+    }
+
+    private CatalogueQuarantineService.Move interruptedMove(String receipt) throws Exception {
+        mixedGroup(); String sha=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)));
+        var move=new CatalogueQuarantineService.Move(folder.resolve("another/shared.pdf").toString(),folder.resolve(".grimmory-quarantine/"+receipt+"/33.quarantined").toString(),file.toString(),11,sha);
+        quarantine.prepare(receipt,1,List.of(move)); quarantine.move(List.of(move)); return move;
+    }
+    @Test void recoveryRestoresAnInterruptedMoveWithoutACommittedReceipt() throws Exception {
+        var move=interruptedMove("interrupted"); assertFalse(Files.exists(Path.of(move.originalPath()))); quarantine.maintain();
+        assertTrue(Files.exists(Path.of(move.originalPath()))); assertFalse(Files.exists(Path.of(move.quarantinePath())));
+        assertEquals("RESTORED",quarantine.entries("interrupted").getFirst().get("state"));
+    }
+    @Test void recoveryRecognizesTheCommittedReceiptAfterAProcessLostItsCompletionCallback() throws Exception {
+        var move=interruptedMove("committed");
+        jdbc.update("INSERT INTO catalogue_reconciliation_audit(id,user_id,library_id,target_book_id,file_path,file_sha256,before_json,after_json) VALUES('committed',7,1,1,?,?,'{}','{}')",move.retainedPath(),move.sha256());
+        quarantine.maintain(); assertEquals("QUARANTINED",quarantine.entries("committed").getFirst().get("state")); assertTrue(Files.exists(Path.of(move.quarantinePath())));
+    }
+    @Test void recoveryNeverOverwritesANewFileAtTheOriginalPath() throws Exception {
+        var move=interruptedMove("occupied"); Files.writeString(Path.of(move.originalPath()),"A new unrelated file"); quarantine.maintain();
+        assertEquals("A new unrelated file",Files.readString(Path.of(move.originalPath()))); assertTrue(Files.exists(Path.of(move.quarantinePath())));
+        assertEquals("PREPARED",quarantine.entries("occupied").getFirst().get("state"));
+    }
+
+    @Test void networkStorageBlocksQuarantineWithoutWeakeningTheSharedReferenceOnlyWorkflow() throws Exception {
+        mixedGroup(); CatalogueQuarantineService raw=org.springframework.test.util.AopTestUtils.getTargetObject(quarantine);
+        org.springframework.test.util.ReflectionTestUtils.setField(raw,"diskType","NETWORK");
+        var p=mixedPreview(1); assertFalse(p.eligible()); assertTrue(p.reasons().stream().anyMatch(reason->reason.contains("local storage")));
+        assertEquals(0,count("catalogue_quarantine")); assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
+    }
+
 }

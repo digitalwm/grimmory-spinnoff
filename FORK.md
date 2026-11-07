@@ -27,37 +27,61 @@ records have not been subjected to bulk duplicate or metadata cleanup.
 ## Catalogue duplicates
 
 Open a library's menu, then **Manage library → Find duplicates → Catalogue duplicates**.
-Administrators can scan the library, inspect one group, choose the surviving record,
-and explicitly confirm a catalogue-only merge. Scanning and inspection are read-only;
-there is no automatic cleanup or bulk merge.
+Administrators can search titles/filenames, scan duplicate candidates, inspect a
+complete group, choose the surviving record, and explicitly confirm its file plan.
+The formats view's **Review and reconcile** action opens the same preview directly;
+there is no automatic bulk merge. Scanning and previewing are read-only.
 
-This first version handles records registered against the same library path,
-case-sensitive subdirectory, and filename. Each record must have exactly one regular
-file, and the complete group must contain 2–20 records. Inspection verifies that
-stored fingerprints match the current file and computes a full SHA-256 checksum.
-It blocks missing files, files above 512 MiB, additional formats, incompatible or
-incomplete title/author identities, conflicting user progress/preferences, pending
-source metadata proposals, device snapshots/state, and unsupported relationships.
-Content duplicates at different paths need a separate review. Interactive scans are
-limited to libraries with 200,000 file records.
+Connected shared paths and exact normalized title/author candidates are reviewed
+together, including matching records outside the older detector's original group.
+The expanded members are shown before confirmation. One operation can collapse
+shared references, combine distinct formats, and reconcile byte-identical copies at
+different paths. Each retained file stays in place. Different bytes, including
+different PDF editions, are retained as separate files; format labels are never
+used as proof of identical content. Full SHA-256 and current native fingerprints
+are checked for every physical file. The selected record keeps its metadata;
+complete original metadata and compatible reading data are archived in a receipt.
 
-A merge preserves the physical book file, keeps the selected record's metadata,
-transfers compatible reading data and preferences, and combines duplicate shelf
-memberships. Removed catalogue rows and their metadata/mappings are archived with
-the before/after state and file checksum in a mandatory database receipt. The
-transaction revalidates the preview and rolls back if data or file content changed.
-Receipts can be downloaded immediately or reopened through **Recent catalogue merges**.
-Receipts support investigation and manual recovery; automated undo is not included.
-Normal deletion and format attachment reject unsafe shared-file selections.
+Inspection blocks missing/unreadable files, symbolic paths, folder books or
+attachments, incompatible identities, conflicting user progress/preferences,
+source metadata proposals, device snapshots/state, unsupported relationships,
+and quarantine paths still referenced outside the selected library. Groups are
+limited to 2–20 book records, 40 file records, 512 MiB per file, and 1 GiB of content
+per preview; scans are limited to 200,000 library file records. Multiple library
+roots need a separate move plan. Identical shelf memberships are combined; other
+conflicting reading data is never silently overwritten.
 
-Migration V150 creates the receipt table and adds book foreign keys to four legacy
-viewer-preference tables. Existing orphan preferences deliberately block migration
-instead of being removed. Back up the database before upgrading.
+Separate byte-identical copies are atomically renamed into
+`<library-root>/.grimmory-quarantine/<receipt-id>/<file-id>.quarantined` on the same
+filesystem. The `.ignore` marker and non-book extension prevent reimport. A durable
+journal commits before moves; rollback restores originals without overwriting any
+new files. Recovery after restart determines whether to restore copies or retain
+them in quarantine by checking the committed merge receipt. Unresolved recovery
+keeps the bytes and journal for review. Receipts remain available under **Recent
+catalogue merges**, including quarantine status, expiry, and downloadable copies.
+Downloading a copy recovers its bytes; automatic undo of the catalogue merge is
+not included.
 
-Validation covers 15 reconciliation regression cases, the affected book deletion
-and format attachment suites, 12 frontend tests, the production build, and a merge
-against an isolated MariaDB instance using the complete application schema. No live
-library records were merged during implementation or validation.
+Quarantine retention defaults to **30 days**. Set
+`APP_CATALOGUE_QUARANTINE_RETENTION_DAYS` in the Compose environment to change the
+retention of new copies; `0` disables automatic purging. Cleanup runs at startup
+and daily at 03:20 in the application's timezone, with at most 100 copies per run.
+It permanently removes an expired copy only when both its checksum and the
+currently registered retained file's path/checksum still match. Missing, changed,
+or unregistered keepers and altered backups retain their quarantine copy for
+review. Audit receipts and recovery journals are retained after purging. Unknown
+files are never purged by this task.
+
+V150 introduced the audit table and four legacy viewer-preference foreign keys.
+V151 adds a merge/maintenance lock and the durable quarantine journal. Back up the
+database and library before upgrading. Normal deletion and the separate format
+attachment endpoint continue to reject unsafe shared-file selections.
+
+Focused tests cover mixed-format merges, identical/different copies, expanded
+membership, stale previews, reading-data conflicts, rollback, restart recovery,
+and retention safety. Validation also includes frontend checks, the production
+build, and an isolated MariaDB application workflow. Live verification only scans
+and previews records; it does not merge or quarantine library books.
 
 ## Fresh-clone deployment
 

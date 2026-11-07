@@ -6,7 +6,7 @@ import {Button} from '@openng/optimus-ui/button';
 import {TranslocoDirective, TranslocoService} from '@jsverse/transloco';
 import {UserService} from '../../../settings/user-management/user.service';
 import {
-  CatalogueGroup, CataloguePreview, CatalogueReceipt, CatalogueReceiptSummary, CatalogueReconciliationService, CatalogueScan,
+  CatalogueGroup, CataloguePreview, CatalogueReceipt, CatalogueReceiptSummary, CatalogueReconciliationService, CatalogueScan, QuarantinedCopy,
 } from '../../service/catalogue-reconciliation.service';
 
 @Component({
@@ -18,6 +18,8 @@ import {
 })
 export class CatalogueReconciliationComponent implements OnChanges {
   @Input({required: true}) libraryId!: number;
+  @Input() reviewGroup: CatalogueGroup | null = null;
+  @Output() reconciled = new EventEmitter<CatalogueReceipt>();
   @Output() mergingChange = new EventEmitter<boolean>();
   @ViewChild('previewPanel') private previewPanel?: ElementRef<HTMLElement>;
   private readonly service = inject(CatalogueReconciliationService);
@@ -28,6 +30,8 @@ export class CatalogueReconciliationComponent implements OnChanges {
   readonly report = signal<CatalogueScan | null>(null);
   readonly inspected = signal<CataloguePreview | null>(null);
   readonly lastReceipt = signal<CatalogueReceipt | null>(null);
+  readonly quarantined = signal<QuarantinedCopy[]>([]);
+  search = '';
   readonly history = signal<CatalogueReceiptSummary[]>([]);
   readonly busy = signal(false);
   readonly merging = signal(false);
@@ -46,6 +50,8 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.busy.set(false);
     this.error.set(null);
     this.history.set([]);
+    this.quarantined.set([]);
+    if (this.reviewGroup) this.inspect(this.reviewGroup);
   }
 
   scan(page = 0): void {
@@ -56,7 +62,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.inspected.set(null);
     this.selectedGroup = null;
     this.confirmed = false;
-    this.service.scan(this.libraryId, page).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.service.scan(this.libraryId, page, this.search).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: report => {
         if (generation !== this.generation) return;
         this.report.set(report);
@@ -80,6 +86,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.service.preview(this.libraryId, group, target).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: preview => {
         if (generation !== this.generation) return;
+        this.selectedGroup = {...group, members: preview.members};
         this.inspected.set(preview);
         this.busy.set(false);
         if (changedGroup) setTimeout(() => this.previewPanel?.nativeElement.focus(), 0);
@@ -101,6 +108,8 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.service.merge(preview).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: receipt => {
         this.lastReceipt.set(receipt);
+        this.reconciled.emit(receipt);
+        this.loadQuarantine(receipt.id);
         this.confirmed = false;
         this.inspected.set(null);
         this.merging.set(false);
@@ -123,6 +132,25 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.service.receipts(library).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: receipts => {if (library === this.libraryId) this.history.set(receipts);},
       error: err => this.error.set(err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed')),
+    });
+  }
+
+  loadQuarantine(id: string): void {
+    const library = this.libraryId;
+    this.service.receipt(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => {if (library === this.libraryId) this.quarantined.set((data['quarantine'] as QuarantinedCopy[]) ?? []);},
+      error: err => this.error.set(err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed')),
+    });
+  }
+
+  downloadCopy(copy: QuarantinedCopy): void {
+    this.service.quarantinedFile(copy.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: blob => {
+        const url = URL.createObjectURL(blob), link = document.createElement('a');
+        link.href = url; link.download = copy.original_path.split('/').at(-1) || 'recovered-book'; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      },
+      error: () => this.error.set(this.t.translate('book.catalogueReconciliation.copyUnavailable')),
     });
   }
 

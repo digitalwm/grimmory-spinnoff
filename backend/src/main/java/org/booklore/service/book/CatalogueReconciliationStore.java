@@ -99,7 +99,7 @@ public class CatalogueReconciliationStore {
         lookups.forEach((mapping, lookup) -> {
             List<Long> keys = result.getOrDefault(mapping, List.of()).stream().map(row -> row.get(lookup.get(1)))
                     .filter(Objects::nonNull).map(Long::valueOf).distinct().toList();
-            if (!keys.isEmpty()) result.put(lookup.get(0), rows(lookup.get(0), "id", keys, false));
+            if (!keys.isEmpty()) result.put(lookup.get(0), rows(lookup.get(0), "id", keys, lock));
         });
         return result;
     }
@@ -121,13 +121,12 @@ public class CatalogueReconciliationStore {
     }
 
     List<Change> plan(Schema schema, Map<String, List<Map<String, String>>> snapshot,
-                      long targetBook, long targetFile, List<String> reasons) {
+                      long targetBook, Map<Long, Long> fileTargets, List<String> reasons) {
         List<Change> changes = new ArrayList<>();
         for (String table : snapshot.keySet()) {
             boolean bookData = BOOK_DATA.contains(table), fileData = FILE_DATA.contains(table);
             if (!bookData && !fileData) continue;
             String column = bookData ? schema.bookLinks.get(table) : schema.fileLinks.get(table);
-            String destination = Long.toString(bookData ? targetBook : targetFile);
             Table definition = schema.tables.get(table);
             if (definition.primaryKey.isEmpty() && !snapshot.get(table).isEmpty()) {
                 reasons.add("Some related data cannot be addressed safely and requires manual review."); continue;
@@ -135,8 +134,12 @@ public class CatalogueReconciliationStore {
             List<Map<String, String>> projected = new ArrayList<>();
             // Put the surviving rows first so duplicate shelf memberships are removed from source records only.
             List<Map<String, String>> ordered = snapshot.get(table).stream()
-                    .sorted(Comparator.comparing(row -> !destination.equals(row.get(column)))).toList();
+                    .sorted(Comparator.comparing((Map<String, String> row) -> {
+                        String destination = Long.toString(bookData ? targetBook : fileTargets.get(Long.valueOf(row.get(column))));
+                        return !destination.equals(row.get(column));
+                    })).toList();
             for (Map<String, String> row : ordered) {
+                String destination = Long.toString(bookData ? targetBook : fileTargets.get(Long.valueOf(row.get(column))));
                 Map<String, String> moved = new TreeMap<>(row); moved.put(column, destination);
                 Map<String, String> collision = projected.stream().filter(other -> definition.uniqueKeys.stream()
                         .anyMatch(key -> key.contains(column) && key.stream().allMatch(k -> moved.get(k) != null
@@ -173,7 +176,7 @@ public class CatalogueReconciliationStore {
         for (String table : METADATA) if (schema.tables.containsKey(table)) {
             jdbc.update("DELETE FROM " + identifier(table) + " WHERE book_id IN (" + placeholders(bookIds.size()) + ")", bookIds.toArray());
         }
-        if (jdbc.update("DELETE FROM book_file WHERE id IN (" + placeholders(fileIds.size()) + ")", fileIds.toArray()) != fileIds.size())
+        if (!fileIds.isEmpty() && jdbc.update("DELETE FROM book_file WHERE id IN (" + placeholders(fileIds.size()) + ")", fileIds.toArray()) != fileIds.size())
             throw ApiError.CONFLICT.createException("Book file records changed. Inspect the group again.");
         if (jdbc.update("DELETE FROM book WHERE id IN (" + placeholders(bookIds.size()) + ")", bookIds.toArray()) != bookIds.size())
             throw ApiError.CONFLICT.createException("Book records changed. Inspect the group again.");

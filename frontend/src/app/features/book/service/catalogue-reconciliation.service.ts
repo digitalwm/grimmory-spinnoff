@@ -26,6 +26,14 @@ export interface CatalogueScan {
   extraRecords: number;
   groups: CatalogueGroup[];
 }
+export interface CatalogueFilePlan {
+  fileId: number; bookId: number; path: string; bookType: string; sha256: string | null; bytes: number;
+  action: 'KEEP' | 'SHARED_REFERENCE' | 'QUARANTINE_COPY'; retainedFileId: number; retainedPath: string;
+}
+export interface QuarantinedCopy {
+  id: string; original_path: string; quarantine_path: string; retained_path: string; file_sha256: string;
+  state: string; purge_after: string | null; detail: string | null;
+}
 export interface CataloguePreview {
   libraryId: number;
   targetBookId: number;
@@ -38,6 +46,8 @@ export interface CataloguePreview {
   relatedRecords: Record<string, number>;
   metadataDifferences: Record<string, Record<string, string | null>>;
   token: string;
+  files?: CatalogueFilePlan[];
+  quarantineRetentionDays?: number;
 }
 export interface CatalogueReceipt {
   id: string;
@@ -58,8 +68,8 @@ export class CatalogueReconciliationService {
   private readonly queryClient = inject(QueryClient);
   private readonly url = `${API_CONFIG.BASE_URL}/api/v1/books/catalogue-reconciliation`;
 
-  scan(libraryId: number, page: number) {
-    return this.http.get<CatalogueScan>(this.url, {params: {libraryId, page, size: 20}});
+  scan(libraryId: number, page: number, search = '') {
+    return this.http.get<CatalogueScan>(this.url, {params: {libraryId, page, size: 20, search}});
   }
   preview(libraryId: number, group: CatalogueGroup, targetBookId: number) {
     return this.http.post<CataloguePreview>(`${this.url}/preview`, {
@@ -74,6 +84,9 @@ export class CatalogueReconciliationService {
       token: preview.token,
       confirmed: true,
     }).pipe(tap(() => void this.queryClient.invalidateQueries({queryKey: bookQueryKeys.all()})));
+  }
+  quarantinedFile(id: string) {
+    return this.http.get(`${this.url}/quarantine/${encodeURIComponent(id)}/file`, {responseType: 'blob'});
   }
   receipt(id: string) {
     return this.http.get<Record<string, unknown>>(`${this.url}/receipts/${encodeURIComponent(id)}`);
