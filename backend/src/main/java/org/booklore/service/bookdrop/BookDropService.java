@@ -310,7 +310,11 @@ public class BookDropService {
                     int resultCountBefore = results.getResults().size();
                     try {
                         fileTransaction.executeWithoutResult(status -> {
-                            processFile(file, metadataById.get(id), defaultLibraryId, defaultPathId, results, failedCount);
+                            // Chunk entities are detached. Reload in this transaction so lazy metadata
+                            // validation and processing use a live persistence context and current data.
+                            BookdropFileEntity managedFile = bookdropFileRepository.findById(id)
+                                    .orElseThrow(() -> ApiError.RESOURCE_NOT_FOUND.createException("Bookdrop file", id));
+                            processFile(managedFile, metadataById.get(id), defaultLibraryId, defaultPathId, results, failedCount);
                             if (failedCount.get() > failuresBefore) status.setRollbackOnly();
                         });
                     } catch (Exception e) {
@@ -666,12 +670,13 @@ public class BookDropService {
                                                Long defaultLibraryId,
                                                Long defaultPathId) {
         Set<Long> affected = new HashSet<>();
-        for (BookdropFileEntity file : bookdropFileRepository.findAllById(ids)) {
-            try {
-                affected.add(prepareFileProcessingContext(file, metadataById.get(file.getId()), defaultLibraryId, defaultPathId).libraryId());
-            } catch (Exception e) {
-                log.warn("Failed to determine library for Bookdrop file {}: {}", file.getId(), e.getMessage());
-            }
+        // Monitoring only needs destination IDs. Do not validate lazy metadata before
+        // the per-file transaction has loaded its managed BookDrop entity.
+        for (Long id : ids) {
+            var requested = metadataById.get(id);
+            Long libraryId = requested != null && requested.getLibraryId() != null
+                    ? requested.getLibraryId() : defaultLibraryId;
+            if (libraryId != null) affected.add(libraryId);
         }
         return affected;
     }

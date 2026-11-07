@@ -61,6 +61,32 @@ class BookDropServiceFinalizeTest {
         assertSame(original,org.springframework.test.util.ReflectionTestUtils.getField(context,"metadata"));
     }
 
+    @Test
+    void reattachesEachFileInsideItsOwnTransactionBeforeReadingLazyMetadata() throws Exception {
+        var dataSource=new org.springframework.jdbc.datasource.DriverManagerDataSource("jdbc:h2:mem:bookdrop_session;DB_CLOSE_DELAY=-1","sa","");
+        org.springframework.test.util.ReflectionTestUtils.setField(bookDropService,"transactionManager",
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(dataSource));
+        var detached=mock(org.booklore.model.entity.BookdropFileEntity.class);
+        when(detached.getId()).thenReturn(1L);when(detached.getFileName()).thenReturn("Elle Scott - Ever Fallen.epub");
+        var managed=org.booklore.model.entity.BookdropFileEntity.builder().id(1L).fileName("Elle Scott - Ever Fallen.epub")
+                .originalMetadata("original").fetchedMetadata("stale").build();
+        when(bookdropFileRepository.findAllById(List.of(1L))).thenReturn(List.of(detached));
+        when(bookdropFileRepository.findById(1L)).thenAnswer(call->{
+            assertTrue(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
+            return java.util.Optional.of(managed);
+        });
+        var original=org.booklore.model.dto.BookMetadata.builder().title("Ever Fallen").authors(List.of("Elle Scott")).build();
+        var stale=org.booklore.model.dto.BookMetadata.builder().title("Unrelated book").authors(List.of("Other Author")).build();
+        when(objectMapper.readValue("original",org.booklore.model.dto.BookMetadata.class)).thenReturn(original);
+        when(objectMapper.readValue("stale",org.booklore.model.dto.BookMetadata.class)).thenReturn(stale);
+        var file=new BookdropFinalizeRequest.BookdropFinalizeFile();file.setFileId(1L);file.setLibraryId(1L);file.setPathId(1L);file.setMetadata(stale);
+        var request=new BookdropFinalizeRequest();request.setSelectAll(false);request.setFiles(List.of(file));
+        var result=bookDropService.finalizeImport(request);
+        assertEquals(1,result.getFailed());assertTrue(result.getResults().getFirst().getMessage().contains("rejected metadata match"));
+        verify(detached,never()).getOriginalMetadata();verify(detached,never()).getFetchedMetadata();
+        verify(bookdropFileRepository).findById(1L);
+    }
+
     @Mock
     private BookdropFileRepository bookdropFileRepository;
     @Mock

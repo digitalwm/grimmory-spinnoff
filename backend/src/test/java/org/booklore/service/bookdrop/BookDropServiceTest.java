@@ -122,6 +122,7 @@ class BookDropServiceTest {
         bookdropFileEntity.setStatus(BookdropFileEntity.Status.PENDING_REVIEW);
         bookdropFileEntity.setOriginalMetadata("{\"title\":\"Test Book\"}");
         bookdropFileEntity.setFetchedMetadata(null);
+        when(bookdropFileRepository.findById(1L)).thenReturn(Optional.of(bookdropFileEntity));
 
         bookdropFile = new BookdropFile();
         bookdropFile.setId(1L);
@@ -395,6 +396,7 @@ class BookDropServiceTest {
 
         when(bookdropFileRepository.findAllIds()).thenReturn(List.of(2L));
         when(bookdropFileRepository.findAllById(any())).thenReturn(List.of(missingFileEntity));
+        when(bookdropFileRepository.findById(2L)).thenReturn(Optional.of(missingFileEntity));
         when(libraryRepository.findByIdWithPaths(1L)).thenReturn(Optional.of(libraryEntity));
 
         BookMetadata metadata = new BookMetadata();
