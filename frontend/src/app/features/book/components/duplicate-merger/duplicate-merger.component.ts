@@ -17,6 +17,7 @@ import {TranslocoDirective, TranslocoPipe, TranslocoService} from '@jsverse/tran
 import {CoverComponent} from '../../../../shared/components/cover/cover.component';
 import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {AppSettingsService} from '../../../../shared/service/app-settings.service';
+import {CatalogueReconciliationComponent} from '../catalogue-reconciliation/catalogue-reconciliation.component';
 
 type PresetMode = 'strict' | 'balanced' | 'aggressive' | 'custom';
 
@@ -41,6 +42,7 @@ interface DisplayGroup extends DuplicateGroup {
     TranslocoDirective,
     TranslocoPipe,
     CoverComponent,
+    CatalogueReconciliationComponent,
   ],
   templateUrl: './duplicate-merger.component.html',
   styleUrls: ['./duplicate-merger.component.scss']
@@ -57,6 +59,8 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   private readonly appSettingsService = inject(AppSettingsService);
   private readonly changeDetectorRef = inject(ChangeDetectorRef);
   libraryId!: number;
+  mode: 'formats' | 'catalogue' = 'formats';
+  catalogueMerging = false;
   presetMode: PresetMode = 'balanced';
   showAdvanced = false;
 
@@ -391,6 +395,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   }
 
   closeDialog(): void {
+    if (this.catalogueMerging) return;
     this.dialogRef.close();
   }
 }

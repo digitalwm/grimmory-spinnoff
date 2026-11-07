@@ -68,6 +68,8 @@ public class BookFileAttachmentService {
         if (targetPrimaryFile == null || !targetPrimaryFile.isBook()) {
             throw ApiError.GENERIC_BAD_REQUEST.createException("Target book has no primary book file");
         }
+        Set<Path> selectedPaths = new HashSet<>();
+        for (BookFileEntity file : targetBook.getBookFiles()) selectedPaths.add(canonicalAttachmentPath(file.getFullFilePath()));
 
         for (BookEntity sourceBook : sourceBooks) {
             if (!targetBook.getLibrary().getId().equals(sourceBook.getLibrary().getId())) {
@@ -93,6 +95,9 @@ public class BookFileAttachmentService {
                             "Source file not found at expected location: " + sourceFilePath +
                             ". The file may have been moved, deleted, or the database record is out of sync.");
                 }
+                if (!selectedPaths.add(canonicalAttachmentPath(sourceFilePath))) {
+                    throw ApiError.CONFLICT.createException("These book records share a physical file. Use Catalogue duplicates to preserve user data and reconcile their catalogue records.");
+                }
             }
         }
 
@@ -104,6 +109,11 @@ public class BookFileAttachmentService {
         }
 
         return new AttachBookFileResponse(getUpdatedBook(targetBookId), deletedSourceBookIds);
+    }
+
+    private Path canonicalAttachmentPath(Path path) {
+        try {return Files.exists(path) ? path.toRealPath() : path.toAbsolutePath().normalize();}
+        catch (IOException e) {throw ApiError.CONFLICT.createException("Could not verify file references. No files were attached or moved.");}
     }
 
     private List<Long> attachWithoutFileMove(BookEntity targetBook, List<BookEntity> sourceBooks) {

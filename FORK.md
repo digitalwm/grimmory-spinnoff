@@ -15,12 +15,49 @@ The upstream license, notices, original authorship, and full commit history are 
 - Metadata identity validation before automatic provider results are merged;
   unrelated title/author matches are rejected, and old conflicting bulk-import
   proposals fall back to embedded metadata.
+- Administrator catalogue reconciliation for duplicate records sharing one registered file,
+  with explicit previews, preserved reading data, and durable receipts.
 - The custom `calibre-importer/` application, including consolidation and repair tools.
 - `deploy/spinnoff/` Compose configuration, environment template, and MariaDB tuning.
 
 The metadata completeness score remains a measure of populated fields, not identity
 confidence. Ambiguous matches may need manual metadata selection. Existing library
 records have not been subjected to bulk duplicate or metadata cleanup.
+
+## Catalogue duplicates
+
+Open a library's menu, then **Manage library → Find duplicates → Catalogue duplicates**.
+Administrators can scan the library, inspect one group, choose the surviving record,
+and explicitly confirm a catalogue-only merge. Scanning and inspection are read-only;
+there is no automatic cleanup or bulk merge.
+
+This first version handles records registered against the same library path,
+case-sensitive subdirectory, and filename. Each record must have exactly one regular
+file, and the complete group must contain 2–20 records. Inspection verifies that
+stored fingerprints match the current file and computes a full SHA-256 checksum.
+It blocks missing files, files above 512 MiB, additional formats, incompatible or
+incomplete title/author identities, conflicting user progress/preferences, pending
+source metadata proposals, device snapshots/state, and unsupported relationships.
+Content duplicates at different paths need a separate review. Interactive scans are
+limited to libraries with 200,000 file records.
+
+A merge preserves the physical book file, keeps the selected record's metadata,
+transfers compatible reading data and preferences, and combines duplicate shelf
+memberships. Removed catalogue rows and their metadata/mappings are archived with
+the before/after state and file checksum in a mandatory database receipt. The
+transaction revalidates the preview and rolls back if data or file content changed.
+Receipts can be downloaded immediately or reopened through **Recent catalogue merges**.
+Receipts support investigation and manual recovery; automated undo is not included.
+Normal deletion and format attachment reject unsafe shared-file selections.
+
+Migration V150 creates the receipt table and adds book foreign keys to four legacy
+viewer-preference tables. Existing orphan preferences deliberately block migration
+instead of being removed. Back up the database before upgrading.
+
+Validation covers 15 reconciliation regression cases, the affected book deletion
+and format attachment suites, 12 frontend tests, the production build, and a merge
+against an isolated MariaDB instance using the complete application schema. No live
+library records were merged during implementation or validation.
 
 ## Fresh-clone deployment
 

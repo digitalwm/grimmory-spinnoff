@@ -1,0 +1,104 @@
+<section class="catalogue-reconciliation" *transloco="let t; prefix: 'book.catalogueReconciliation'">
+  <h3>{{ t('title') }}</h3>
+  <p>{{ t('description') }}</p>
+  <p class="scope-note">{{ t('scope') }}</p>
+
+  @if (!isAdmin()) {
+    <p role="status">{{ t('adminOnly') }}</p>
+  } @else {
+    <div class="toolbar">
+      <p-button [label]="t('scan')" icon="pi pi-search" (click)="scan()" [loading]="busy()" [disabled]="busy() || merging()" />
+      @if (report(); as result) {
+        <span role="status">{{ t('summary', {groups: result.totalGroups, records: result.extraRecords}) }}</span>
+      }
+    </div>
+    @if (error(); as message) {<p class="error-message" role="alert">{{ message }}</p>}
+    <details>
+      <summary>{{ t('history') }}</summary>
+      <p-button [label]="t('loadHistory')" severity="secondary" (click)="loadHistory()" />
+      @for (receipt of history(); track receipt.id) {
+        <div class="toolbar">
+          <span>#{{ receipt.targetBookId }} · {{ receipt.completedAt }}</span>
+          <p-button [label]="t('downloadReceipt')" severity="secondary" (click)="downloadReceipt(receipt.id)" />
+        </div>
+      }
+    </details>
+    @if (lastReceipt(); as receipt) {
+      <div class="receipt" role="status">
+        <strong>{{ t('merged', {target: receipt.targetBookId, count: receipt.removedBookIds.length}) }}</strong>
+        <p>{{ t('receipt', {id: receipt.id}) }}</p>
+        <p-button [label]="t('downloadReceipt')" icon="pi pi-download" severity="secondary" (click)="downloadReceipt()" />
+      </div>
+    }
+    @if (report(); as result) {
+      @if (result.totalGroups === 0) {<p>{{ t('empty') }}</p>}
+      <div class="group-list">
+        @for (group of result.groups; track group.key) {
+          <article class="group-card" [class.selected]="selectedGroup?.key === group.key">
+            <h4>{{ group.members[0].title || t('untitled') }}</h4>
+            <p class="file-path">{{ group.path }}</p>
+            <p>{{ t('groupRecords', {count: group.members.length}) }}</p>
+            <p-button [label]="t('inspect')" icon="pi pi-eye" severity="secondary" (click)="inspect(group)" [disabled]="busy() || merging()" />
+          </article>
+        }
+      </div>
+      @if (result.totalGroups > result.size) {
+        <nav class="toolbar" [attr.aria-label]="t('pagination')">
+          <p-button [label]="t('previous')" severity="secondary" (click)="scan(result.page - 1)" [disabled]="result.page === 0 || busy() || merging()" />
+          <span>{{ t('page', {number: result.page + 1}) }}</span>
+          <p-button [label]="t('next')" severity="secondary" (click)="scan(result.page + 1)" [disabled]="(result.page + 1) * result.size >= result.totalGroups || busy() || merging()" />
+        </nav>
+      }
+    }
+    @if (inspected(); as preview) {
+      <section #previewPanel class="preview" tabindex="-1" [attr.aria-label]="t('preview')">
+        <h3>{{ t('preview') }}</h3>
+        <p class="file-path">{{ preview.path }}</p>
+        @if (preview.fileSha256) {
+          <p>{{ t('verifiedFile', {bytes: preview.fileBytes}) }}</p>
+          <details><summary>{{ t('fileFingerprint') }}</summary><code>{{ preview.fileSha256 }}</code></details>
+        }
+        <fieldset>
+          <legend>{{ t('chooseSurvivor') }}</legend>
+          @for (member of preview.members; track member.bookId) {
+            <label class="member">
+              <input type="radio" name="catalogue-survivor" [value]="member.bookId" [checked]="targetBookId === member.bookId"
+                (change)="selectTarget(member.bookId)" [disabled]="busy() || merging()" />
+              <span><strong>#{{ member.bookId }} — {{ member.title }}</strong><br />{{ member.authors.join(', ') }}</span>
+            </label>
+          }
+        </fieldset>
+        <h4>{{ t('attachedData') }}</h4>
+        @for (entry of relatedEntries(preview); track entry.label) {
+          <p>{{ entry.label }}: {{ entry.count }}</p>
+        } @empty {<p>{{ t('noAttachedData') }}</p>}
+        <details>
+          <summary>{{ t('metadataDifferences', {count: differenceEntries(preview).length}) }}</summary>
+          <p>{{ t('metadataPolicy') }}</p>
+          @for (difference of differenceEntries(preview); track difference.field) {
+            <div class="difference">
+              <strong>{{ difference.field }}</strong>
+              @for (member of preview.members; track member.bookId) {
+                <p><strong>#{{ member.bookId }}:</strong> {{ difference.values[member.bookId] || t('notSet') }}</p>
+              }
+            </div>
+          }
+        </details>
+        @if (!preview.eligible) {
+          <div class="review-required" role="status">
+            <h4>{{ t('reviewRequired') }}</h4>
+            <ul>@for (reason of preview.reasons; track reason) {<li>{{ reason }}</li>}</ul>
+          </div>
+        } @else {
+          <p>{{ t('preservation') }}</p>
+          <label class="confirmation">
+            <input type="checkbox" [(ngModel)]="confirmed" [disabled]="busy() || merging()" />
+            <span>{{ t('confirm', {target: preview.targetBookId, count: preview.members.length - 1}) }}</span>
+          </label>
+          <p-button [label]="t('merge')" icon="pi pi-check-circle" severity="success" (click)="merge()"
+            [loading]="merging()" [disabled]="!confirmed || busy() || merging()" />
+        }
+      </section>
+    }
+  }
+</section>

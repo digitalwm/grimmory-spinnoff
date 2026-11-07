@@ -399,6 +399,24 @@ public class BookService {
                     .toList();
         }
         List<Long> failedFileDeletions = new ArrayList<>();
+        Set<Long> deletingIds = books.stream().map(BookEntity::getId).collect(Collectors.toSet());
+        // Preflight the complete selection before deleting anything. Shared physical
+        // files must be reconciled through the catalogue-only workflow.
+        Set<Path> deletingPaths = new HashSet<>();
+        Set<String> selectedNames = new HashSet<>();
+        for (BookEntity book : books) for (BookFileEntity file : book.getBookFiles()) {
+            deletingPaths.add(canonicalFilePath(file));
+            selectedNames.add(file.getFileName());
+        }
+        // Bound the lookup and avoid a separate catalogue query for every selected file.
+        List<String> names = new ArrayList<>(selectedNames);
+        for (int start = 0; start < names.size(); start += 500) {
+            for (BookFileEntity reference : bookFileRepository.findFileReferencesByNames(names.subList(start, Math.min(start + 500, names.size())))) {
+                if (!deletingIds.contains(reference.getBook().getId()) && deletingPaths.contains(canonicalFilePath(reference))) {
+                    throw ApiError.CONFLICT.createException("This file is also referenced by another book record. Use Catalogue duplicates to reconcile the records before deleting it.");
+                }
+            }
+        }
         for (BookEntity book : books) {
             for (BookFileEntity bookFile : book.getBookFiles()) {
                 Path fullFilePath = bookFile.getFullFilePath();
@@ -464,6 +482,12 @@ public class BookService {
                     .map(Path::toFile)
                     .forEach(File::delete);
         }
+    }
+
+    private Path canonicalFilePath(BookFileEntity file) {
+        Path path = file.getFullFilePath().toAbsolutePath().normalize();
+        try {return Files.exists(path) ? path.toRealPath() : path;}
+        catch (IOException e) {throw ApiError.CONFLICT.createException("Could not verify shared file references. No book files were deleted.");}
     }
 
     public void deleteEmptyParentDirsUpToLibraryFolders(Path currentDir, Set<Path> libraryRoots) {

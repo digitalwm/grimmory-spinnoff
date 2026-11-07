@@ -14,10 +14,21 @@
       [text]="true"
       severity="secondary"
       (click)="closeDialog()"
+      [disabled]="catalogueMerging"
       class="close-button" />
   </div>
 
   <div class="dialog-content">
+    <div class="action-bar">
+      <p-button [label]="'book.catalogueReconciliation.formatsTab' | transloco" severity="secondary"
+        [outlined]="mode !== 'formats'" (click)="mode = 'formats'" [disabled]="catalogueMerging || isMerging() || isScanning()" />
+      <p-button [label]="'book.catalogueReconciliation.catalogueTab' | transloco" severity="secondary"
+        [outlined]="mode !== 'catalogue'" (click)="mode = 'catalogue'" [disabled]="catalogueMerging || isMerging() || isScanning()" />
+    </div>
+    @if (mode === 'catalogue') {
+      <app-catalogue-reconciliation [libraryId]="libraryId" (mergingChange)="catalogueMerging = $event" />
+    } @else {
+
     <!-- Preset Mode Selector -->
     <div class="preset-section">
       <p-selectButton
@@ -235,6 +246,7 @@
         }
       }
     </div>
+    }
   </div>
 </div>
 </ng-container>

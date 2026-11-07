@@ -14,6 +14,9 @@ import java.util.Optional;
 @Repository
 public interface BookFileRepository extends JpaRepository<BookFileEntity, Long> {
 
+    @Query("SELECT bf FROM BookFileEntity bf JOIN FETCH bf.book b LEFT JOIN FETCH b.libraryPath WHERE bf.fileName IN :fileNames")
+    List<BookFileEntity> findFileReferencesByNames(@Param("fileNames") List<String> fileNames);
+
     @Query("""
             SELECT bf FROM BookFileEntity bf
             WHERE bf.book.libraryPath.id = :libraryPathId

@@ -1,0 +1,84 @@
+:host {
+  display: block;
+}
+
+.catalogue-reconciliation {
+  display: grid;
+  gap: 1rem;
+
+  h3, h4, p {
+    margin: 0;
+  }
+
+  p, li, label {
+    line-height: 1.5;
+  }
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.scope-note {
+  color: var(--p-text-muted-color);
+}
+
+.group-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: 0.75rem;
+}
+
+.group-card, .preview, .receipt {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.group-card.selected {
+  border-color: var(--p-primary-color);
+}
+
+.file-path, code, .difference p {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+fieldset {
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.member, .confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  cursor: pointer;
+
+  input {
+    margin-top: 0.35rem;
+    accent-color: var(--p-primary-color);
+  }
+}
+
+.difference {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.review-required, .error-message {
+  border-left: 3px solid var(--p-orange-500);
+  padding: 0.75rem 1rem;
+}
+
+details summary {
+  cursor: pointer;
+  padding: 0.5rem 0;
+}

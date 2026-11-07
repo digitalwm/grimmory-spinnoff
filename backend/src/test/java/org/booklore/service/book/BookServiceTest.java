@@ -48,8 +48,30 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class BookServiceTest {
 
+    @Test
+    void deleteBooksRefusesSharedFileBeforeDeletingAnySelectedRecord() throws Exception {
+        Path folder = Files.createTempDirectory("shared-book-deletion-");
+        Path shared = folder.resolve("shared.epub"); Files.writeString(shared, "Preserve this file");
+        try {
+            var path = LibraryPathEntity.builder().id(1L).path(folder.toString()).build();
+            var selected = BookEntity.builder().id(11L).libraryPath(path).build();
+            var other = BookEntity.builder().id(22L).libraryPath(path).build();
+            var first = BookFileEntity.builder().id(1L).book(selected).fileName("shared.epub").fileSubPath("").build();
+            var second = BookFileEntity.builder().id(2L).book(other).fileName("shared.epub").fileSubPath("").build();
+            selected.setBookFiles(Set.of(first));
+            when(authenticationService.getAuthenticatedUser()).thenReturn(testUser);
+            when(bookQueryService.findAllWithMetadataByIds(Set.of(11L))).thenReturn(List.of(selected));
+            when(bookFileRepository.findFileReferencesByNames(List.of("shared.epub"))).thenReturn(List.of(first, second));
+            assertThrows(APIException.class, () -> bookService.deleteBooks(Set.of(11L)));
+            assertEquals("Preserve this file", Files.readString(shared));
+            verify(bookRepository, never()).deleteAllInBatch(anyList());
+        } finally {Files.deleteIfExists(shared); Files.deleteIfExists(folder);}
+    }
+
     @Mock
     private BookRepository bookRepository;
+    @Mock
+    private BookFileRepository bookFileRepository;
     @Mock
     private PdfViewerPreferencesRepository pdfViewerPreferencesRepository;
     @Mock

@@ -55,6 +55,19 @@ class BookFileAttachmentServiceTest {
     private LibraryEntity library;
     private LibraryPathEntity libraryPath;
 
+    @Test
+    void sharedPhysicalFileMustUseCatalogueReconciliationEvenWhenMovesAreDisabled() throws IOException {
+        BookEntity target = createBook(1L), source = createBook(2L);
+        createBookFile(11L, target, "shared.epub", "", true, false);
+        createBookFileNoPhysicalFile(22L, source, "shared.epub", "", true);
+        when(bookRepository.findByIdWithBookFiles(1L)).thenReturn(Optional.of(target));
+        when(bookRepository.findByIdWithBookFiles(2L)).thenReturn(Optional.of(source));
+        assertThrows(APIException.class, () -> service.attachBookFiles(1L, List.of(2L), false));
+        assertTrue(Files.isRegularFile(tempDir.resolve("shared.epub")));
+        verify(bookFileRepository, never()).reassignFilesToBook(anyLong(), anyList());
+        verify(bookRepository, never()).deleteAll(anyList());
+    }
+
     @BeforeEach
     void setUp() throws IOException {
         tempDir = rawTempDir.toRealPath();
