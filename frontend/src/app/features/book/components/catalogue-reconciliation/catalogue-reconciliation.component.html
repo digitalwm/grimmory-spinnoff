@@ -59,11 +59,11 @@
           </article>
         }
       </div>
-      @if (result.totalGroups > result.size) {
+      @if (result.totalGroups > result.size || (result.offset ?? result.page * result.size) > 0) {
         <nav class="toolbar" [attr.aria-label]="t('pagination')">
-          <p-button [label]="t('previous')" severity="secondary" (click)="scan(result.page - 1)" [disabled]="result.page === 0 || busy() || merging()" />
-          <span>{{ t('page', {number: result.page + 1}) }}</span>
-          <p-button [label]="t('next')" severity="secondary" (click)="scan(result.page + 1)" [disabled]="(result.page + 1) * result.size >= result.totalGroups || busy() || merging()" />
+          <p-button [label]="t('previous')" severity="secondary" (click)="scan(result.page - 1, true)" [disabled]="(result.offset ?? result.page * result.size) === 0 || busy() || merging()" />
+          <span>{{ t('range', {first: (result.offset ?? result.page * result.size) + (result.groups.length ? 1 : 0), last: (result.offset ?? result.page * result.size) + result.groups.length, total: result.totalGroups}) }}</span>
+          <p-button [label]="t('next')" severity="secondary" (click)="scan(result.page + 1, true)" [disabled]="(result.offset ?? result.page * result.size) + result.groups.length >= result.totalGroups || busy() || merging()" />
         </nav>
       }
     }

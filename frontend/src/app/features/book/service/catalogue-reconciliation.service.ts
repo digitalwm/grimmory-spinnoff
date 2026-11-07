@@ -22,6 +22,7 @@ export interface CatalogueScan {
   libraryId: number;
   page: number;
   size: number;
+  offset?: number;
   totalGroups: number;
   extraRecords: number;
   groups: CatalogueGroup[];
@@ -68,8 +69,8 @@ export class CatalogueReconciliationService {
   private readonly queryClient = inject(QueryClient);
   private readonly url = `${API_CONFIG.BASE_URL}/api/v1/books/catalogue-reconciliation`;
 
-  scan(libraryId: number, page: number, search = '') {
-    return this.http.get<CatalogueScan>(this.url, {params: {libraryId, page, size: 20, search}});
+  scan(libraryId: number, page: number, search = '', offset?: number) {
+    return this.http.get<CatalogueScan>(this.url, {params: {libraryId, page, size: 20, search, ...(offset === undefined ? {} : {offset})}});
   }
   preview(libraryId: number, group: CatalogueGroup, targetBookId: number) {
     return this.http.post<CataloguePreview>(`${this.url}/preview`, {

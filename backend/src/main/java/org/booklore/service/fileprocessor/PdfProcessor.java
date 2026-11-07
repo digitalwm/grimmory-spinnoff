@@ -1,5 +1,7 @@
 package org.booklore.service.fileprocessor;
 
+import org.booklore.util.IsbnUtils;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.grimmory.pdfium4j.PdfDocument;
@@ -169,10 +171,10 @@ public class PdfProcessor extends AbstractFileProcessor implements BookFileProce
             }
 
             if (StringUtils.isNotBlank(extracted.getIsbn10())) {
-                bookEntity.getMetadata().setIsbn10(truncate(extracted.getIsbn10(), 10));
+                bookEntity.getMetadata().setIsbn10(IsbnUtils.normalize10(extracted.getIsbn10()));
             }
             if (StringUtils.isNotBlank(extracted.getIsbn13())) {
-                bookEntity.getMetadata().setIsbn13(truncate(extracted.getIsbn13(), 13));
+                bookEntity.getMetadata().setIsbn13(IsbnUtils.normalize13(extracted.getIsbn13()));
             }
             
             // Categories, moods, and tags

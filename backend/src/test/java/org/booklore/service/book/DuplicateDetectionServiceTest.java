@@ -145,8 +145,8 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void returnsEmptyWhenNoSignalsEnabled() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Same", "Author", "9781234567890", null);
-            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Same", "Author", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Same", "Author", "9780306406157", null);
+            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Same", "Author", "9780306406157", null);
             stubBooks(book1, book2);
 
             DuplicateDetectionRequest noSignals = new DuplicateDetectionRequest(LIBRARY_ID, false, false, false, false, false);
@@ -174,8 +174,8 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void groupsBooksWithSameIsbn13() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9781234567890", null);
-            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book", "Author", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9780306406157", null);
+            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book", "Author", "9780306406157", null);
             stubBooks(book1, book2);
 
             List<DuplicateGroup> result = service.findDuplicates(onlyIsbn());
@@ -198,7 +198,7 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void doesNotGroupDifferentIsbns() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book A", "Author", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book A", "Author", "9780306406157", null);
             BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book B", "Author", "9780987654321", null);
             stubBooks(book1, book2);
 
@@ -209,7 +209,7 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void skipsBooksWithNullMetadata() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9780306406157", null);
             BookEntity book2 = createBook(BookFileType.MOBI, "Book", "Author");
             book2.setMetadata(null);
             stubBooks(book1, book2);
@@ -232,8 +232,8 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void trimsIsbnBeforeGrouping() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9781234567890 ", null);
-            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book", "Author", " 9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9780306406157 ", null);
+            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book", "Author", " 9780306406157", null);
             stubBooks(book1, book2);
 
             List<DuplicateGroup> result = service.findDuplicates(onlyIsbn());
@@ -251,7 +251,7 @@ class DuplicateDetectionServiceTest {
         void groupsBooksWithSameGoodreadsId() {
             BookEntity book1 = createBook(BookFileType.EPUB, "Book A", "Author");
             book1.getMetadata().setGoodreadsId("12345");
-            BookEntity book2 = createBook(BookFileType.MOBI, "Book B", "Author");
+            BookEntity book2 = createBook(BookFileType.MOBI, "Book A", "Author");
             book2.getMetadata().setGoodreadsId("12345");
             stubBooks(book1, book2);
 
@@ -265,7 +265,7 @@ class DuplicateDetectionServiceTest {
         void groupsBooksWithSameAsin() {
             BookEntity book1 = createBook(BookFileType.EPUB, "Book A", "Author");
             book1.getMetadata().setAsin("B0ABCDEFGH");
-            BookEntity book2 = createBook(BookFileType.MOBI, "Book B", "Author");
+            BookEntity book2 = createBook(BookFileType.MOBI, "Book A", "Author");
             book2.getMetadata().setAsin("B0ABCDEFGH");
             stubBooks(book1, book2);
 
@@ -295,7 +295,7 @@ class DuplicateDetectionServiceTest {
         void doesNotGroupBooksWithDifferentExternalIds() {
             BookEntity book1 = createBook(BookFileType.EPUB, "Book A", "Author");
             book1.getMetadata().setGoodreadsId("111");
-            BookEntity book2 = createBook(BookFileType.MOBI, "Book B", "Author");
+            BookEntity book2 = createBook(BookFileType.MOBI, "Book A", "Author");
             book2.getMetadata().setGoodreadsId("222");
             stubBooks(book1, book2);
 
@@ -307,7 +307,7 @@ class DuplicateDetectionServiceTest {
         @Test
         void skipsBooksWithNoExternalIds() {
             BookEntity book1 = createBook(BookFileType.EPUB, "Book A", "Author");
-            BookEntity book2 = createBook(BookFileType.MOBI, "Book B", "Author");
+            BookEntity book2 = createBook(BookFileType.MOBI, "Book A", "Author");
             stubBooks(book1, book2);
 
             List<DuplicateGroup> result = service.findDuplicates(onlyExternalId());
@@ -319,7 +319,7 @@ class DuplicateDetectionServiceTest {
         void trimsExternalIdsBeforeGrouping() {
             BookEntity book1 = createBook(BookFileType.EPUB, "Book A", "Author");
             book1.getMetadata().setHardcoverId("  abc  ");
-            BookEntity book2 = createBook(BookFileType.MOBI, "Book B", "Author");
+            BookEntity book2 = createBook(BookFileType.MOBI, "Book A", "Author");
             book2.getMetadata().setHardcoverId("abc");
             stubBooks(book1, book2);
 
@@ -332,10 +332,10 @@ class DuplicateDetectionServiceTest {
         void matchesAcrossDifferentIdTypes() {
             BookEntity book1 = createBook(BookFileType.EPUB, "Book A", "Author");
             book1.getMetadata().setGoodreadsId("shared-id");
-            BookEntity book2 = createBook(BookFileType.MOBI, "Book B", "Author");
+            BookEntity book2 = createBook(BookFileType.MOBI, "Book A", "Author");
             book2.getMetadata().setGoodreadsId("shared-id");
             book2.getMetadata().setAudibleId("aud-123");
-            BookEntity book3 = createBook(BookFileType.PDF, "Book C", "Author");
+            BookEntity book3 = createBook(BookFileType.PDF, "Book A", "Author");
             book3.getMetadata().setAudibleId("aud-123");
             stubBooks(book1, book2, book3);
 
@@ -636,9 +636,9 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void higherConfidenceStrategyPreventsLowerFromRegrouping() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Same Title", "Same Author", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Same Title", "Same Author", "9780306406157", null);
             book1.getMetadata().setGoodreadsId("gr1");
-            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Same Title", "Same Author", "9781234567890", null);
+            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Same Title", "Same Author", "9780306406157", null);
             book2.getMetadata().setGoodreadsId("gr1");
             stubBooks(book1, book2);
 
@@ -650,8 +650,8 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void booksGroupedByIsbnNotRegroupedByTitleAuthor() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "The Book", "Author", "9781234567890", null);
-            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "The Book", "Author", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "The Book", "Author", "9780306406157", null);
+            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "The Book", "Author", "9780306406157", null);
             BookEntity book3 = createBook(BookFileType.PDF, "The Book", "Author");
             BookEntity book4 = createBook(BookFileType.AZW3, "The Book", "Author");
             stubBooks(book1, book2, book3, book4);
@@ -679,8 +679,8 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void multipleStrategiesCreateSeparateGroups() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book A", "Author A", "9781234567890", null);
-            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book A", "Author A", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book A", "Author A", "9780306406157", null);
+            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book A", "Author A", "9780306406157", null);
 
             BookEntity book3 = createBook(BookFileType.EPUB, "Book B", "Author B");
             BookEntity book4 = createBook(BookFileType.MOBI, "Book B", "Author B");
@@ -889,7 +889,7 @@ class DuplicateDetectionServiceTest {
             List<BookEntity> books = new ArrayList<>();
             for (int i = 0; i < 10; i++) {
                 BookEntity book = createBookWithIsbn(BookFileType.EPUB, "Popular Book", "Author",
-                        "9781234567890", null);
+                        "9780306406157", null);
                 books.add(book);
             }
             when(bookRepository.findAllForDuplicateDetection(LIBRARY_ID)).thenReturn(books);
@@ -947,8 +947,8 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void duplicateGroupContainsCorrectBookDtos() {
-            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9781234567890", null);
-            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book", "Author", "9781234567890", null);
+            BookEntity book1 = createBookWithIsbn(BookFileType.EPUB, "Book", "Author", "9780306406157", null);
+            BookEntity book2 = createBookWithIsbn(BookFileType.MOBI, "Book", "Author", "9780306406157", null);
             stubBooks(book1, book2);
 
             List<DuplicateGroup> result = service.findDuplicates(onlyIsbn());
@@ -961,4 +961,28 @@ class DuplicateDetectionServiceTest {
             assertThat(bookIds).containsExactlyInAnyOrder(book1.getId(), book2.getId());
         }
     }
+    @Test void truncatedPublisherPrefixNeverGroupsDifferentFootmensClubVolumes() {
+        var first=createBookWithIsbn(BookFileType.EPUB,"The Footman and I: The Footmen’s Club Trilogy","Bowman, Valerie","978-0-9893758",null);
+        var second=createBookWithIsbn(BookFileType.EPUB,"The Footman and I","Valerie Bowman","978-0-9893758",null);
+        var third=createBookWithIsbn(BookFileType.EPUB,"The Valet Who Loved Me","Valerie Bowman","978-0-9893758",null);
+        stubBooks(first,second,third); assertThat(service.findDuplicates(onlyIsbn())).isEmpty();
+    }
+    @Test void rejectsBadCheckDigitsEvenWhenTheInvalidStringsAreIdentical() {
+        var first=createBookWithIsbn(BookFileType.EPUB,"Book","Author","9780306406158",null);
+        var second=createBookWithIsbn(BookFileType.PDF,"Book","Author","9780306406158",null);
+        stubBooks(first,second); assertThat(service.findDuplicates(onlyIsbn())).isEmpty();
+    }
+    @Test void normalizesHyphenatedIsbnsBeforeMatching() {
+        var first=createBookWithIsbn(BookFileType.EPUB,"Book","Author","978-0-306-40615-7",null);
+        var second=createBookWithIsbn(BookFileType.PDF,"Book","Author","9780306406157",null);
+        stubBooks(first,second); assertThat(service.findDuplicates(onlyIsbn())).hasSize(1);
+    }
+    @Test void conflictingTitlesOverrideEvenAValidSharedIsbnOrProviderId() {
+        var first=createBookWithIsbn(BookFileType.EPUB,"The Footman and I","Valerie Bowman","9780306406157",null);
+        var second=createBookWithIsbn(BookFileType.EPUB,"The Valet Who Loved Me","Valerie Bowman","9780306406157",null);
+        first.getMetadata().setGoodreadsId("shared"); second.getMetadata().setGoodreadsId("shared");
+        stubBooks(first,second); assertThat(service.findDuplicates(onlyIsbn())).isEmpty();
+        assertThat(service.findDuplicates(onlyExternalId())).isEmpty();
+    }
+
 }

@@ -27,8 +27,8 @@ public class CatalogueReconciliationController {
 
     @GetMapping
     public ResponseEntity<CatalogueReconciliationService.Scan> scan(@RequestParam long libraryId,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size, @RequestParam(required = false) String search) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.scan(libraryId, page, size, search));
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size, @RequestParam(required = false) String search, @RequestParam(required = false) Integer offset) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.scan(libraryId, page, size, search, offset));
     }
     @PostMapping("/preview")
     public ResponseEntity<CatalogueReconciliationService.Preview> preview(@RequestBody @Valid InspectRequest request) {

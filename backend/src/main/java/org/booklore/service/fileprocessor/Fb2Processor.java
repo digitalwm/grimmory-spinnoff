@@ -1,5 +1,7 @@
 package org.booklore.service.fileprocessor;
 
+import org.booklore.util.IsbnUtils;
+
 import org.booklore.mapper.BookMapper;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.settings.LibraryFile;
@@ -108,8 +110,8 @@ public class Fb2Processor extends AbstractFileProcessor implements BookFileProce
         metadata.setSeriesName(truncate(fb2Metadata.getSeriesName(), 1000));
         metadata.setSeriesNumber(fb2Metadata.getSeriesNumber());
         metadata.setSeriesTotal(fb2Metadata.getSeriesTotal());
-        metadata.setIsbn13(truncate(fb2Metadata.getIsbn13(), 13));
-        metadata.setIsbn10(truncate(fb2Metadata.getIsbn10(), 10));
+        metadata.setIsbn13(IsbnUtils.normalize13(fb2Metadata.getIsbn13()));
+        metadata.setIsbn10(IsbnUtils.normalize10(fb2Metadata.getIsbn10()));
         metadata.setPageCount(fb2Metadata.getPageCount());
 
         String lang = fb2Metadata.getLanguage();

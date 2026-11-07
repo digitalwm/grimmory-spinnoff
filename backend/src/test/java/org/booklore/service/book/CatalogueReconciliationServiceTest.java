@@ -374,4 +374,16 @@ class CatalogueReconciliationServiceTest {
         assertEquals(0,count("catalogue_quarantine")); assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
     }
 
+    @Test void explicitOffsetsDoNotSkipTheNextGroupAfterAPrecedingCandidateWasRemoved() {
+        jdbc.update("INSERT INTO book VALUES(3,1,1,80,false,false),(4,1,1,80,false,false),(5,1,1,80,false,false),(6,1,1,80,false,false)");
+        jdbc.update("INSERT INTO book_metadata VALUES(3,'Alpha',''),(4,'Alpha',''),(5,'Beta',''),(6,'Beta','')");
+        jdbc.update("INSERT INTO book_metadata_author_mapping VALUES(3,1),(4,1),(5,1),(6,1)");
+        jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash) VALUES(33,3,'','alpha.epub','hash'),(44,4,'','alpha.epub','hash'),(55,5,'','beta.epub','hash'),(66,6,'','beta.epub','hash')");
+        assertEquals(2,service.scan(1,0,2).groups().size());
+        jdbc.update("DELETE FROM book WHERE id IN (3,4)");
+        var next=service.scan(1,1,2,null,1);
+        assertEquals(1,next.offset()); assertEquals(1,next.groups().size());
+        assertEquals(List.of(1L,2L),next.groups().getFirst().members().stream().map(CatalogueReconciliationService.Member::bookId).toList());
+    }
+
 }

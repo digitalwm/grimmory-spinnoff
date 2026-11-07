@@ -1,5 +1,7 @@
 package org.booklore.service.fileprocessor;
 
+import org.booklore.util.IsbnUtils;
+
 import org.booklore.mapper.BookMapper;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.settings.LibraryFile;
@@ -112,8 +114,8 @@ public class Azw3Processor extends AbstractFileProcessor implements BookFileProc
         metadata.setSeriesName(truncate(azw3Metadata.getSeriesName(), 1000));
         metadata.setSeriesNumber(azw3Metadata.getSeriesNumber());
         metadata.setSeriesTotal(azw3Metadata.getSeriesTotal());
-        metadata.setIsbn13(truncate(azw3Metadata.getIsbn13(), 13));
-        metadata.setIsbn10(truncate(azw3Metadata.getIsbn10(), 10));
+        metadata.setIsbn13(IsbnUtils.normalize13(azw3Metadata.getIsbn13()));
+        metadata.setIsbn10(IsbnUtils.normalize10(azw3Metadata.getIsbn10()));
         metadata.setPageCount(azw3Metadata.getPageCount());
 
         String lang = azw3Metadata.getLanguage();

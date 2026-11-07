@@ -1,5 +1,7 @@
 package org.booklore.service.fileprocessor;
 
+import org.booklore.util.IsbnUtils;
+
 import org.booklore.mapper.BookMapper;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.ComicMetadata;
@@ -148,8 +150,8 @@ public class CbxProcessor extends AbstractFileProcessor implements BookFileProce
             metadata.setLanguage(truncate(extracted.getLanguage(), 10));
 
             // ISBN fields
-            metadata.setIsbn13(truncate(extracted.getIsbn13(), 13));
-            metadata.setIsbn10(truncate(extracted.getIsbn10(), 10));
+            metadata.setIsbn13(IsbnUtils.normalize13(extracted.getIsbn13()));
+            metadata.setIsbn10(IsbnUtils.normalize10(extracted.getIsbn10()));
 
             // External IDs
             metadata.setOpenlibraryId(truncate(extracted.getOpenlibraryId(), 100));

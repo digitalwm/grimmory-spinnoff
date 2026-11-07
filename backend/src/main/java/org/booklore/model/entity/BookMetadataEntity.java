@@ -1,6 +1,7 @@
 package org.booklore.model.entity;
 
 import org.booklore.util.BookUtils;
+import org.booklore.util.IsbnUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
@@ -369,8 +370,10 @@ public class BookMetadataEntity {
         this.publisher = trimOrNull(this.publisher);
         this.seriesName = trimOrNull(this.seriesName);
         this.language = trimOrNull(this.language);
-        this.isbn13 = trimOrNull(this.isbn13);
-        this.isbn10 = trimOrNull(this.isbn10);
+        String validIsbn13 = IsbnUtils.normalize13(this.isbn13);
+        this.isbn13 = validIsbn13 != null ? validIsbn13 : trimOrNull(this.isbn13);
+        String validIsbn10 = IsbnUtils.normalize10(this.isbn10);
+        this.isbn10 = validIsbn10 != null ? validIsbn10 : trimOrNull(this.isbn10);
         this.openlibraryId = trimOrNull(this.openlibraryId);
         this.asin = trimOrNull(this.asin);
         this.goodreadsId = trimOrNull(this.goodreadsId);

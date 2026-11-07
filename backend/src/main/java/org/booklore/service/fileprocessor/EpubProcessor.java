@@ -1,5 +1,7 @@
 package org.booklore.service.fileprocessor;
 
+import org.booklore.util.IsbnUtils;
+
 import org.booklore.mapper.BookMapper;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.settings.LibraryFile;
@@ -121,8 +123,8 @@ public class EpubProcessor extends AbstractFileProcessor implements BookFileProc
         metadata.setSeriesName(truncate(epubMetadata.getSeriesName(), 1000));
         metadata.setSeriesNumber(epubMetadata.getSeriesNumber());
         metadata.setSeriesTotal(epubMetadata.getSeriesTotal());
-        metadata.setIsbn13(truncate(epubMetadata.getIsbn13(), 13));
-        metadata.setIsbn10(truncate(epubMetadata.getIsbn10(), 10));
+        metadata.setIsbn13(IsbnUtils.normalize13(epubMetadata.getIsbn13()));
+        metadata.setIsbn10(IsbnUtils.normalize10(epubMetadata.getIsbn10()));
         metadata.setPageCount(epubMetadata.getPageCount());
 
         String lang = epubMetadata.getLanguage();

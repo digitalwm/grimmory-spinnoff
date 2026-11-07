@@ -3671,7 +3671,8 @@
       "noExpiry": "No automatic expiry",
       "formatsNotice": "Review each group before merging. Distinct formats stay at their current paths; byte-identical copies can be moved to recoverable quarantine.",
       "reviewNext": "Review next group",
-      "reviewGroup": "Review and reconcile"
+      "reviewGroup": "Review and reconcile",
+      "range": "{{first}}–{{last}} of {{total}} groups"
     }
   },
   "readerAudiobook": {

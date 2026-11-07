@@ -45,7 +45,7 @@ public class CatalogueReconciliationService {
 
     public record Member(long bookId, long fileId, String title, List<String> authors, String storedHash) {}
     public record Group(String key, String path, long suggestedTargetBookId, List<Member> members) {}
-    public record Scan(long libraryId, int page, int size, int totalGroups, int extraRecords, List<Group> groups) {}
+    public record Scan(long libraryId, int page, int size, int totalGroups, int extraRecords, List<Group> groups, int offset) {}
     public record Preview(long libraryId, long targetBookId, List<Member> members, String path,
                           String fileSha256, long fileBytes, boolean eligible, List<String> reasons,
                           Map<String, Integer> relatedRecords, Map<String, Map<Long, String>> metadataDifferences,
@@ -70,9 +70,13 @@ public class CatalogueReconciliationService {
     public Scan scan(long libraryId, int page, int size) {return scan(libraryId, page, size, null);}
 
     @Transactional(readOnly = true)
-    public Scan scan(long libraryId, int page, int size, String search) {
+    public Scan scan(long libraryId, int page, int size, String search) {return scan(libraryId,page,size,search,null);}
+
+    @Transactional(readOnly = true)
+    public Scan scan(long libraryId, int page, int size, String search, Integer offset) {
         requireAdmin();
         if (search != null && search.length() > 200) throw ApiError.GENERIC_BAD_REQUEST.createException("Search must be at most 200 characters.");
+        if (offset != null && (offset < 0 || offset > MAX_LIBRARY_FILES)) throw ApiError.GENERIC_BAD_REQUEST.createException("Invalid scan offset.");
         if (page < 0 || size < 1 || size > 50) throw ApiError.GENERIC_BAD_REQUEST.createException("Choose a page size between 1 and 50.");
         if (jdbc.queryForObject("SELECT COUNT(*) FROM library WHERE id=?", Long.class, libraryId) != 1)
             throw ApiError.LIBRARY_NOT_FOUND.createException(libraryId);
@@ -98,12 +102,12 @@ public class CatalogueReconciliationService {
                 .filter(rows -> search == null || search.isBlank() || rows.stream().anyMatch(file ->
                         normalise(file.title + " " + file.name).contains(normalise(search))))
                 .sorted(Comparator.comparing(rows -> normalise(rows.getFirst().title))).toList();
-        int first = (int) Math.min((long) page * size, duplicates.size());
+        int first = (int) Math.min(offset == null ? (long) page * size : offset, duplicates.size());
         List<Group> groups = duplicates.subList(first, Math.min(first + size, duplicates.size())).stream()
                 .map(rows -> new Group(sha(rows.stream().map(FileRow::bookId).distinct().sorted().toList().toString()), rows.getFirst().path().toString(), suggested(rows),
                         groupMembers(rows))).toList();
         return new Scan(libraryId, page, size, duplicates.size(), duplicates.stream()
-                .mapToInt(rows -> (int) rows.stream().map(FileRow::bookId).distinct().count() - 1).sum(), groups);
+                .mapToInt(rows -> (int) rows.stream().map(FileRow::bookId).distinct().count() - 1).sum(), groups, first);
     }
 
     @Transactional(readOnly = true)

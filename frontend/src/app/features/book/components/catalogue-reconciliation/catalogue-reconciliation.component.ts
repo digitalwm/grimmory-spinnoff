@@ -1,4 +1,4 @@
-import {Component, computed, ElementRef, EventEmitter, inject, Input, OnChanges, Output, signal, ViewChild} from '@angular/core';
+import {Component, computed, ElementRef, EventEmitter, inject, Input, OnChanges, Output, signal, ViewChild, SimpleChanges} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DestroyRef} from '@angular/core';
@@ -40,8 +40,16 @@ export class CatalogueReconciliationComponent implements OnChanges {
   targetBookId: number | null = null;
   confirmed = false;
   private generation = 0;
+  private scannedSearch = '';
 
-  ngOnChanges(): void {
+  ngOnChanges(changes?: SimpleChanges): void {
+    if (changes && !changes['libraryId']) {
+      if (changes['reviewGroup']) {
+        this.generation++; this.busy.set(false); this.confirmed = false; this.inspected.set(null); this.selectedGroup = null;
+        if (this.reviewGroup) this.inspect(this.reviewGroup);
+      }
+      return;
+    }
     this.generation++;
     this.report.set(null);
     this.inspected.set(null);
@@ -54,7 +62,7 @@ export class CatalogueReconciliationComponent implements OnChanges {
     if (this.reviewGroup) this.inspect(this.reviewGroup);
   }
 
-  scan(page = 0): void {
+  scan(page = 0, navigate = false): void {
     if (!this.isAdmin() || this.busy() || this.merging()) return;
     const generation = ++this.generation;
     this.busy.set(true);
@@ -62,12 +70,19 @@ export class CatalogueReconciliationComponent implements OnChanges {
     this.inspected.set(null);
     this.selectedGroup = null;
     this.confirmed = false;
-    this.service.scan(this.libraryId, page, this.search).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    const current = this.report();
+    const sameSearch = this.search === this.scannedSearch;
+    if (!navigate || !sameSearch) page = 0;
+    const start = current?.offset ?? (current ? current.page * current.size : 0);
+    const offset = navigate && sameSearch && current && page > current.page ? start + current.groups.length
+      : navigate && sameSearch && current && page < current.page ? Math.max(0, start - current.size) : 0;
+    this.service.scan(this.libraryId, page, this.search, offset).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: report => {
         if (generation !== this.generation) return;
         this.report.set(report);
+        this.scannedSearch = this.search;
         this.busy.set(false);
-        if (report.totalGroups > 0 && report.groups.length === 0 && page > 0) this.scan(page - 1);
+
       },
       error: err => this.fail(err, generation),
     });
@@ -114,7 +129,16 @@ export class CatalogueReconciliationComponent implements OnChanges {
         this.inspected.set(null);
         this.merging.set(false);
         this.mergingChange.emit(false);
-        this.scan(this.report()?.page ?? 0);
+        const current = this.report();
+        if (current) {
+          const changed = new Set([receipt.targetBookId, ...receipt.removedBookIds]);
+          const groups = current.groups.filter(group => !group.members.some(member => changed.has(member.bookId)));
+          const removed = current.groups.filter(group => !groups.includes(group));
+          this.report.set({...current, groups,
+            totalGroups: Math.max(0, current.totalGroups - removed.length),
+            extraRecords: Math.max(0, current.extraRecords - removed.reduce((sum, group) => sum + group.members.length - 1, 0))});
+        }
+        this.selectedGroup = null;
       },
       error: err => {
         this.merging.set(false);

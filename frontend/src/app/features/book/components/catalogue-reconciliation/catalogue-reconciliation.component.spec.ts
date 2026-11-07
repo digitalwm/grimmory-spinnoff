@@ -1,4 +1,4 @@
-import {signal} from '@angular/core';
+import {signal, SimpleChange} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {TranslocoService} from '@jsverse/transloco';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -53,14 +53,14 @@ describe('CatalogueReconciliationComponent', () => {
     pending.next({...preview, targetBookId: 2, token: 'new-token'}); pending.complete();
     expect(component.inspected()?.targetBookId).toBe(2); expect(component.confirmed).toBe(false);
   });
-  it('keeps a receipt, resets confirmation, and rescans after one confirmed merge', () => {
+  it('keeps a receipt and updates the existing list without another full scan', () => {
     api.merge.mockReturnValue(of({id: 'receipt', targetBookId: 1, removedBookIds: [2], fileSha256: 'verified', completedAt: 'now'}));
     api.scan.mockReturnValueOnce(of(report)).mockReturnValueOnce(of({...report, totalGroups: 0, extraRecords: 0, groups: []}));
     const event = vi.spyOn(component.mergingChange, 'emit');
     component.scan(); component.inspect(group); component.confirmed = true; component.merge();
     expect(api.merge).toHaveBeenCalledExactlyOnceWith(preview);
     expect(component.lastReceipt()?.id).toBe('receipt'); expect(component.confirmed).toBe(false);
-    expect(component.report()?.totalGroups).toBe(0); expect(api.scan).toHaveBeenCalledTimes(2);
+    expect(component.report()?.totalGroups).toBe(0); expect(api.scan).toHaveBeenCalledTimes(1);
     expect(event.mock.calls).toEqual([[true], [false]]);
   });
   it('clears a stale preview on conflict and never retries a merge automatically', () => {
@@ -82,7 +82,7 @@ describe('CatalogueReconciliationComponent', () => {
   });
   it('includes title search in the bounded scan', () => {
     component.search = 'A Tough Man to Tame'; component.scan();
-    expect(api.scan).toHaveBeenCalledExactlyOnceWith(7, 0, 'A Tough Man to Tame'); expect(api.merge).not.toHaveBeenCalled();
+    expect(api.scan).toHaveBeenCalledExactlyOnceWith(7, 0, 'A Tough Man to Tame', 0); expect(api.merge).not.toHaveBeenCalled();
   });
   it('shows the durable quarantine state after a successful merge', () => {
     api.receipt.mockReturnValue(of({quarantine:[{id:'copy',state:'QUARANTINED',purge_after:'2026-12-07'}]}));
@@ -94,4 +94,20 @@ describe('CatalogueReconciliationComponent', () => {
     component.scan(); component.inspect(group); component.loadHistory();
     expect(api.scan).not.toHaveBeenCalled(); expect(api.preview).not.toHaveBeenCalled(); expect(api.receipts).not.toHaveBeenCalled();
   });
+  it('keeps the scanned list when a formats group is opened and cleared', () => {
+    component.scan();component.reviewGroup=group;
+    component.ngOnChanges({reviewGroup:new SimpleChange(null,group,false)});
+    expect(component.report()).toBe(report);
+    component.reviewGroup=null;component.ngOnChanges({reviewGroup:new SimpleChange(group,null,false)});
+    expect(component.report()).toBe(report);expect(api.scan).toHaveBeenCalledTimes(1);
+  });
+  it('continues pagination from the remaining rows without skipping candidates after a merge', () => {
+    const groups=[group,...Array.from({length:19},(_,index)=>({...group,key:'group-'+index,members:group.members.map(m=>({...m,bookId:m.bookId+10+index*2}))}))];
+    api.scan.mockReturnValue(of({...report,groups,totalGroups:40,extraRecords:40,offset:0}));
+    api.merge.mockReturnValue(of({id:'receipt',targetBookId:1,removedBookIds:[2],fileSha256:'verified',completedAt:'now'}));
+    component.scan();component.inspect(group);component.confirmed=true;component.merge();
+    expect(component.report()?.groups).toHaveLength(19);expect(api.scan).toHaveBeenCalledTimes(1);
+    component.scan(1,true);expect(api.scan).toHaveBeenLastCalledWith(7,1,'',19);
+  });
+
 });

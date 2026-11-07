@@ -1,5 +1,7 @@
 package org.booklore.service.fileprocessor;
 
+import org.booklore.util.IsbnUtils;
+
 import org.booklore.mapper.BookMapper;
 import org.booklore.model.dto.BookMetadata;
 import org.booklore.model.dto.settings.LibraryFile;
@@ -113,8 +115,8 @@ public class MobiProcessor extends AbstractFileProcessor implements BookFileProc
         metadata.setSeriesName(truncate(mobiMetadata.getSeriesName(), 1000));
         metadata.setSeriesNumber(mobiMetadata.getSeriesNumber());
         metadata.setSeriesTotal(mobiMetadata.getSeriesTotal());
-        metadata.setIsbn13(truncate(mobiMetadata.getIsbn13(), 13));
-        metadata.setIsbn10(truncate(mobiMetadata.getIsbn10(), 10));
+        metadata.setIsbn13(IsbnUtils.normalize13(mobiMetadata.getIsbn13()));
+        metadata.setIsbn10(IsbnUtils.normalize10(mobiMetadata.getIsbn10()));
         metadata.setPageCount(mobiMetadata.getPageCount());
 
         String lang = mobiMetadata.getLanguage();

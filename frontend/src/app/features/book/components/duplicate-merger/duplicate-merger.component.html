@@ -24,10 +24,15 @@
         [outlined]="mode !== 'formats'" (click)="mode = 'formats'" [disabled]="catalogueMerging || isMerging() || isScanning()" />
       <p-button [label]="'book.catalogueReconciliation.catalogueTab' | transloco" severity="secondary"
         [outlined]="mode !== 'catalogue'" (click)="reviewedGroup = null; mode = 'catalogue'" [disabled]="catalogueMerging || isMerging() || isScanning()" />
+      @if (mode === 'catalogue' && reviewedGroupFinished && activeGroups.length > 0) {
+        <p-button [label]="'book.catalogueReconciliation.reviewNext' | transloco" icon="pi pi-arrow-right"
+          (click)="mergeAll()" [disabled]="catalogueMerging" />
+      }
     </div>
-    @if (mode === 'catalogue') {
+    <div [hidden]="mode !== 'catalogue'">
       <app-catalogue-reconciliation [libraryId]="libraryId" [reviewGroup]="reviewedGroup" (reconciled)="onReconciled($event)" (mergingChange)="catalogueMerging = $event" />
-    } @else {
+    </div>
+    <div [hidden]="mode !== 'formats'">
 
     <!-- Preset Mode Selector -->
     <div class="preset-section">
@@ -239,7 +244,7 @@
         }
       }
     </div>
-    }
+    </div>
   </div>
 </div>
 </ng-container>

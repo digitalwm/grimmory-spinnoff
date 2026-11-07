@@ -97,4 +97,21 @@ describe('DuplicateMergerComponent', () => {
     expect(component.groups[0].dismissed).toBe(false);
   });
 
+  it('keeps unaffected groups, selections and the completed scan after reconciliation', () => {
+    component.ngOnInit();const first={...createGroup([createBook(1),createBook(2)]),selectedTargetBookId:1,dismissed:false,selectedForDeletion:new Set<number>()};
+    const second={...createGroup([createBook(3),createBook(4)]),selectedTargetBookId:3,dismissed:false,selectedForDeletion:new Set([4])};
+    component.groups=[first,second];component.hasScanned.set(true);
+    component.onReconciled({id:'receipt',targetBookId:1,removedBookIds:[2],fileSha256:'verified',completedAt:'now'});
+    expect(component.hasScanned()).toBe(true);expect(first.dismissed).toBe(true);
+    expect(component.activeGroups).toEqual([second]);expect(second.selectedForDeletion.has(4)).toBe(true);
+  });
+
+  it('reviews the next remaining group on the current page instead of jumping back to page one', () => {
+    component.ngOnInit();component.groups=[1,3,5].map(id=>({...createGroup([createBook(id),createBook(id+1)]),selectedTargetBookId:id,dismissed:false,selectedForDeletion:new Set<number>()}));
+    component.pageSize=1;component.pageFirst=1;
+    component.onReconciled({id:'receipt',targetBookId:3,removedBookIds:[4],fileSha256:'verified',completedAt:'now'});
+    component.mergeAll();expect(component.reviewedGroup?.members.map(member=>member.bookId)).toEqual([5,6]);
+    expect(component.pageFirst).toBe(1);
+  });
+
 });

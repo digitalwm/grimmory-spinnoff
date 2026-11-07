@@ -63,6 +63,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   mode: 'formats' | 'catalogue' = 'formats';
   catalogueMerging = false;
   reviewedGroup: CatalogueGroup | null = null;
+  reviewedGroupFinished = false;
   presetMode: PresetMode = 'balanced';
   showAdvanced = false;
 
@@ -295,6 +296,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   }
 
   mergeGroup(group: DisplayGroup): void {
+    this.reviewedGroupFinished = false;
     this.reviewedGroup = {
       key: group.books.map(book => book.id).sort((a, b) => a - b).join('-'),
       path: this.getBookFilePath(group.books[0]),
@@ -306,13 +308,17 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
 
   mergeAll(): void {
     // Every group now has a verified plan and a separate explicit confirmation.
-    const first = this.activeGroups[0];
+    const first = this.pagedGroups[0] ?? this.activeGroups[0];
     if (first) this.mergeGroup(first);
   }
 
-  onReconciled(_receipt: CatalogueReceipt): void {
-    // The retained book can now have additional formats; a fresh scan replaces stale detector results.
-    this.groups = []; this.hasScanned.set(false); this.pageFirst = 0;
+  onReconciled(receipt: CatalogueReceipt): void {
+    this.reviewedGroupFinished = true;
+    const changed = new Set([receipt.targetBookId, ...receipt.removedBookIds]);
+    for (const group of this.groups) {
+      if (group.books.some(book => changed.has(book.id))) group.dismissed = true;
+    }
+    if (this.pagedGroups.length === 0 && this.pageFirst > 0) this.pageFirst = Math.max(0, this.pageFirst - this.pageSize);
   }
 
   deleteGroup(group: DisplayGroup): void {

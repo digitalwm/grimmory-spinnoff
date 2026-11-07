@@ -11,6 +11,7 @@ import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.model.enums.BookFileType;
 import org.booklore.repository.BookRepository;
 import org.booklore.util.BookUtils;
+import org.booklore.util.IsbnUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -78,12 +79,10 @@ public class DuplicateDetectionService {
             BookMetadataEntity meta = book.getMetadata();
             if (meta == null) continue;
 
-            String isbn13 = meta.getIsbn13();
-            if (isbn13 == null && meta.getIsbn10() != null) {
-                isbn13 = BookUtils.isbn10To13(meta.getIsbn10());
-            }
-            if (isbn13 != null && !isbn13.isBlank()) {
-                isbnGroups.computeIfAbsent(isbn13.trim(), k -> new ArrayList<>()).add(book);
+            String isbn13 = IsbnUtils.canonical13(meta.getIsbn13(), meta.getIsbn10());
+            String title = BookUtils.normalizeForSearch(meta.getTitle());
+            if (isbn13 != null && title != null && !title.isBlank()) {
+                isbnGroups.computeIfAbsent(isbn13 + "\n" + title, k -> new ArrayList<>()).add(book);
             }
         }
 
@@ -107,7 +106,9 @@ public class DuplicateDetectionService {
         Map<String, Long> idToBook = new HashMap<>();
         for (BookEntity book : candidates) {
             BookMetadataEntity meta = book.getMetadata();
-            List<String> externalIds = extractExternalIds(meta);
+            String title = BookUtils.normalizeForSearch(meta.getTitle());
+            if (title == null || title.isBlank()) continue;
+            List<String> externalIds = extractExternalIds(meta).stream().map(id -> id + "\n" + title).toList();
             for (String extId : externalIds) {
                 if (idToBook.containsKey(extId)) {
                     union(parent, book.getId(), idToBook.get(extId));

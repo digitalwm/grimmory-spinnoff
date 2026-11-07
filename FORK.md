@@ -31,6 +31,17 @@ Administrators can search titles/filenames, scan duplicate candidates, inspect a
 complete group, choose the surviving record, and explicitly confirm its file plan.
 The formats view's **Review and reconcile** action opens the same preview directly;
 there is no automatic bulk merge. Scanning and previewing are read-only.
+Completed groups are removed from the existing review list without rescanning it;
+remaining groups, selections, and tab/page state stay available. **Review next group**
+continues through that list. Catalogue pagination uses the remaining row offset so
+local removals do not skip the next candidate. Explicit scanning refreshes the snapshot.
+
+ISBN matching normalizes separators and checks ISBN-10/13 check digits. Invalid or
+truncated publisher prefixes cannot create a group. ISBN and provider-ID matches
+also require the same normalized full title, so a copied identifier cannot combine
+different named volumes. File imports normalize valid ISBNs before storage instead
+of truncating hyphenated strings to the database column length. Existing invalid
+legacy values remain available for review and are ignored as matching evidence.
 
 Connected shared paths and exact normalized title/author candidates are reviewed
 together, including matching records outside the older detector's original group.
