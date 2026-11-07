@@ -40,14 +40,16 @@ and can stop after the current operation. Keep the window open during the batch.
 Transport/authorization/server failures stop the batch without automatically retrying
 an uncertain operation. Every committed group retains its own receipt and journal.
 
-Direct merging requires a validated work identity, no unseen expanded members, at most one distinct file per format, and no conflicting
-language/series or different locked source metadata. The existing eligibility
-checks still apply. Different editions, ambiguous identities, expanded groups,
-locked metadata decisions, and conflicting reading data block the merge without
-being modified. Compatible subtitle and additional credit differences use the
-existing identity validation and do not require an extra confirmation. Direct and reviewed merging share the same transaction, file
-verification, quarantine, rollback, and receipt implementation. Discovery values
-are compared with locked snapshots before a direct merge can proceed.
+Merge uses exactly the selected records and keeps the target metadata and default
+file. Differences in contents, language, series, contributor credits or source
+metadata locks do not require another confirmation when work identity is valid.
+Distinct files remain attached as alternatives; byte-identical copies use recoverable
+quarantine. Copies still referenced by other records stay in place. Matching titles
+elsewhere do not silently expand a direct merge. The selected default file remains
+preferred even if an attached file is older or the library format priority differs.
+Actual reading-data conflicts, identity disagreements, unverifiable files and
+unsupported device/proposal data still block the merge. Direct and reviewed merging
+share transaction, file verification, quarantine, rollback, and receipt logic.
 Completed groups are removed from the existing review list without rescanning it;
 remaining groups, selections, and tab/page state stay available. **Review next group**
 continues through that list. Catalogue pagination uses the remaining row offset so

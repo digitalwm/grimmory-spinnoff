@@ -117,6 +117,9 @@ public class BookEntity {
         if (bookFiles.isEmpty()) {
             return null;
         }
+        var preferred = bookFiles.stream().filter(bf -> bf.isBookFormat() && bf.isPreferredPrimary())
+                .min(Comparator.comparingLong(BookFileEntity::getId));
+        if (preferred.isPresent()) return preferred.get();
         if (library != null && library.getFormatPriority() != null && !library.getFormatPriority().isEmpty()) {
             for (BookFileType format : library.getFormatPriority()) {
                 var match = bookFiles.stream()

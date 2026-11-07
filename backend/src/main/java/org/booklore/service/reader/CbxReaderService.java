@@ -207,7 +207,7 @@ public class CbxReaderService {
                     .orElseThrow(() -> ApiError.INVALID_INPUT.createException("Invalid book type: " + bookType));
             BookFileEntity bookFile = bookEntity.getBookFiles().stream()
                     .filter(bf -> bf.getBookType() == requestedType)
-                    .min(Comparator.comparingLong(BookFileEntity::getId))
+                    .min(BookFileEntity.preferredOrder())
                     .orElseThrow(() -> ApiError.FILE_NOT_FOUND.createException("No file of type " + bookType + " found for book"));
             return bookFile.getFullFilePath();
         }

@@ -42,10 +42,10 @@ class CatalogueReconciliationServiceTest {
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         for (String ddl : List.of(
-                "CREATE TABLE library(id BIGINT PRIMARY KEY)",
+                "CREATE TABLE library(id BIGINT PRIMARY KEY,format_priority VARCHAR(200))",
                 "CREATE TABLE library_path(id BIGINT PRIMARY KEY,path VARCHAR(2000))",
                 "CREATE TABLE book(id BIGINT PRIMARY KEY,library_id BIGINT,library_path_id BIGINT,metadata_match_score FLOAT,is_physical BOOLEAN,deleted BOOLEAN)",
-                "CREATE TABLE book_file(id BIGINT PRIMARY KEY,book_id BIGINT NOT NULL REFERENCES book(id) ON DELETE CASCADE,file_sub_path VARCHAR(512),file_name VARCHAR(1000),current_hash VARCHAR(128),book_type VARCHAR(20) DEFAULT 'EPUB',is_book BOOLEAN DEFAULT true,is_folder_based BOOLEAN DEFAULT false)",
+                "CREATE TABLE book_file(id BIGINT PRIMARY KEY,book_id BIGINT NOT NULL REFERENCES book(id) ON DELETE CASCADE,file_sub_path VARCHAR(512),file_name VARCHAR(1000),current_hash VARCHAR(128),book_type VARCHAR(20) DEFAULT 'EPUB',is_book BOOLEAN DEFAULT true,is_folder_based BOOLEAN DEFAULT false,preferred_primary BOOLEAN DEFAULT false)",
                 "CREATE TABLE book_metadata(book_id BIGINT PRIMARY KEY REFERENCES book(id) ON DELETE CASCADE,title VARCHAR(1000),description VARCHAR(5000))",
                 "CREATE TABLE author(id BIGINT PRIMARY KEY,name VARCHAR(255))",
                 "CREATE TABLE book_metadata_author_mapping(book_id BIGINT REFERENCES book_metadata(book_id) ON DELETE CASCADE,author_id BIGINT REFERENCES author(id),PRIMARY KEY(book_id,author_id))",
@@ -57,7 +57,7 @@ class CatalogueReconciliationServiceTest {
         jdbc.execute("CREATE TABLE catalogue_reconciliation_lock(id INT PRIMARY KEY)");
         jdbc.update("INSERT INTO catalogue_reconciliation_lock VALUES(1)");
         jdbc.execute("CREATE TABLE catalogue_quarantine(id VARCHAR(36) PRIMARY KEY,receipt_id VARCHAR(36),library_id BIGINT,original_path VARCHAR(2000),quarantine_path VARCHAR(2000),retained_path VARCHAR(2000),retained_file_id BIGINT,file_sha256 VARCHAR(64),state VARCHAR(32),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,purge_after TIMESTAMP,completed_at TIMESTAMP,detail VARCHAR(4000))");
-        jdbc.update("INSERT INTO library VALUES(1)");
+        jdbc.update("INSERT INTO library(id) VALUES(1)");
         jdbc.update("INSERT INTO library_path VALUES(1,?)", folder.toString());
         jdbc.update("INSERT INTO book VALUES(1,1,1,80,false,false),(2,1,1,70,false,false)");
         jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash) VALUES(11,1,'','shared.epub','same-hash'),(22,2,'','shared.epub','same-hash')");
@@ -300,11 +300,13 @@ class CatalogueReconciliationServiceTest {
         var p=mixedPreview(1); assertFalse(p.eligible()); assertThrows(APIException.class,()->apply(p)); assertEquals(4,count("book"));
     }
 
-    @Test void quarantiningAFileReferencedOutsideTheSelectedLibraryIsBlocked() throws Exception {
-        mixedGroup(); jdbc.update("INSERT INTO library VALUES(2)");
+    @Test void aCopyReferencedByAnotherLibraryStaysInPlaceWhileSelectedRecordsMerge() throws Exception {
+        mixedGroup(); jdbc.update("INSERT INTO library(id) VALUES(2)");
         jdbc.update("INSERT INTO book VALUES(9,2,1,0,false,false)");
         jdbc.update("INSERT INTO book_file(id,book_id,file_sub_path,file_name,current_hash,book_type) VALUES(99,9,'another','shared.pdf',?,'PDF')",org.booklore.service.file.FileFingerprint.generateHash(file));
-        var p=mixedPreview(1); assertFalse(p.eligible()); assertTrue(p.reasons().stream().anyMatch(reason->reason.contains("outside this group")));
+        var p=mixedPreview(1); assertTrue(p.eligible()); var receipt=apply(p);
+        assertEquals(2,count("book")); assertEquals(0,count("catalogue_quarantine"));
+        assertTrue(Files.exists(folder.resolve("another/shared.pdf"))); assertEquals(9L,jdbc.queryForObject("SELECT book_id FROM book_file WHERE id=99",Long.class));
     }
 
     @Test void candidateSearchFindsAllCopiesAndFormatsWithoutModifyingAnything() throws Exception {
@@ -402,34 +404,48 @@ class CatalogueReconciliationServiceTest {
         assertEquals("MERGED",result.status());assertEquals(2,count("book_file"));assertEquals(1,count("catalogue_quarantine"));
         assertEquals("QUARANTINED",quarantine.entries(result.receipt().id()).getFirst().get("state"));
     }
-    @Test void quickMergeReturnsAnExpandedPreviewWithoutChangingUnseenRecords() throws Exception {
+    @Test void quickMergeUsesOnlyTheSelectedRecordsWithoutExpandingMatchingTitles() throws Exception {
         mixedGroup();var result=quick(List.of(1L,2L,4L),1);
-        assertEquals("REVIEW_REQUIRED",result.status());assertNull(result.receipt());assertEquals(4,result.preview().members().size());
-        assertEquals(4,count("book"));assertEquals(0,count("catalogue_quarantine"));assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
+        assertEquals("MERGED",result.status());assertNull(result.preview());assertEquals(List.of(2L,4L),result.receipt().removedBookIds());
+        assertEquals(2,count("book"));assertEquals(0,count("catalogue_quarantine"));assertTrue(Files.exists(folder.resolve("another/shared.pdf")));
     }
-    @Test void quickMergeRequiresReviewForDifferentEditionsInTheSameFormat() throws Exception {
+    @Test void quickMergeKeepsDifferentFilesInTheSameFormatAndUsesTheSelectedTarget() throws Exception {
         mixedGroup();Files.writeString(folder.resolve("another/shared.pdf"),"A different PDF edition");
         jdbc.update("UPDATE book_file SET current_hash=? WHERE id=33",org.booklore.service.file.FileFingerprint.generateHash(folder.resolve("another/shared.pdf")));
-        var result=quick(List.of(1L,2L,3L,4L),1);assertEquals("REVIEW_REQUIRED",result.status());
-        assertTrue(result.preview().eligible());assertEquals(0,count("catalogue_reconciliation_audit"));
+        var result=quick(List.of(1L,2L,3L,4L),3);assertEquals("MERGED",result.status());
+        assertEquals(3,count("book_file"));assertEquals(33L,jdbc.queryForObject("SELECT id FROM book_file WHERE preferred_primary=true",Long.class));
+        assertEquals(1,count("catalogue_reconciliation_audit"));assertEquals(0,count("catalogue_quarantine"));
     }
-    @Test void quickMergeRequiresReviewForDifferentLockedMetadata() {
+    @Test void quickMergeUsesChosenMetadataDespiteLockedSourceFieldsAndArchivesTheOriginals() {
         jdbc.execute("ALTER TABLE book_metadata ADD COLUMN description_locked BOOLEAN DEFAULT false");
-        jdbc.update("UPDATE book_metadata SET description_locked=true WHERE book_id=2");
-        var result=quick(List.of(1L,2L),1);assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().eligible());
-        assertTrue(result.reviewReasons().stream().anyMatch(reason->reason.contains("locked")));assertEquals(2,count("book"));
-        jdbc.update("UPDATE book_metadata SET description_locked=false");jdbc.execute("ALTER TABLE book_metadata ADD COLUMN cover_locked BOOLEAN DEFAULT false");
-        jdbc.update("UPDATE book_metadata SET cover_locked=true WHERE book_id=2");assertEquals("REVIEW_REQUIRED",quick(List.of(1L,2L),1).status());
+        jdbc.execute("ALTER TABLE book_metadata ADD COLUMN cover_locked BOOLEAN DEFAULT false");
+        jdbc.update("UPDATE book_metadata SET description_locked=true,cover_locked=true WHERE book_id=2");
+        var result=quick(List.of(1L,2L),1);assertEquals("MERGED",result.status());
+        assertEquals("Chosen description",jdbc.queryForObject("SELECT description FROM book_metadata",String.class));
+        assertTrue(service.receipt(result.receipt().id()).get("before_json").toString().contains("Original source description"));
     }
-    @Test void quickMergeRequiresReviewForLanguageButAllowsCompatibleAdditionalCredits() throws Exception {
+    @Test void quickMergeUsesTargetLanguageAndSeriesDespiteConflictingSourceValues() throws Exception {
         mixedGroup();jdbc.execute("ALTER TABLE book_metadata ADD COLUMN language VARCHAR(20) DEFAULT 'en'");
-        jdbc.update("UPDATE book_metadata SET language='ro' WHERE book_id=4");
-        var result=quick(List.of(1L,2L,3L,4L),1);assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().eligible());
-        assertTrue(result.reviewReasons().stream().anyMatch(reason->reason.contains("language")));
-        jdbc.update("UPDATE book_metadata SET language='en'");jdbc.update("INSERT INTO author VALUES(2,'Additional Narrator')");
-        jdbc.update("INSERT INTO book_metadata_author_mapping VALUES(4,2)");result=quick(List.of(1L,2L,3L,4L),1);
-        assertEquals("MERGED",result.status());assertEquals(1,count("book"));
+        jdbc.execute("ALTER TABLE book_metadata ADD COLUMN series_name VARCHAR(100) DEFAULT 'Chosen series'");
+        jdbc.update("UPDATE book_metadata SET language='ro',series_name='Other series' WHERE book_id=4");
+        jdbc.update("INSERT INTO author VALUES(2,'Additional Narrator')");jdbc.update("INSERT INTO book_metadata_author_mapping VALUES(4,2)");
+        var result=quick(List.of(1L,2L,3L,4L),1);assertEquals("MERGED",result.status());assertEquals(1,count("book"));
+        assertEquals("en",jdbc.queryForObject("SELECT language FROM book_metadata",String.class));
+        assertEquals("Chosen series",jdbc.queryForObject("SELECT series_name FROM book_metadata",String.class));
     }
+    @Test void quickMergeLeavesOutsideSharedReferencesAndTheirFileUntouched() throws Exception {
+        mixedGroup();var result=quick(List.of(1L,3L),3);assertEquals("MERGED",result.status());
+        assertEquals(3,count("book"));assertEquals(0,count("catalogue_quarantine"));assertTrue(Files.exists(file));
+        assertEquals(2L,jdbc.queryForObject("SELECT book_id FROM book_file WHERE id=22",Long.class));
+        assertEquals(33L,jdbc.queryForObject("SELECT id FROM book_file WHERE preferred_primary=true",Long.class));
+    }
+    @Test void quickMergeRetainsTheTargetsExistingFormatPriorityAndPrimaryChoice() throws Exception {
+        mixedGroup();jdbc.update("UPDATE library SET format_priority='[\"EPUB\",\"PDF\"]'");
+        jdbc.update("UPDATE book_file SET book_id=1 WHERE id=44");
+        var result=quick(List.of(1L,2L,3L),1);assertEquals("MERGED",result.status());
+        assertEquals(44L,jdbc.queryForObject("SELECT id FROM book_file WHERE preferred_primary=true",Long.class));
+    }
+
     @Test void quickMergeNeverBypassesConflictingReadingProgressOrAdministratorChecks() {
         jdbc.update("INSERT INTO user_book_progress VALUES(101,1,8,'one'),(102,2,8,'two')");
         var result=quick(List.of(1L,2L),1);assertEquals("REVIEW_REQUIRED",result.status());assertFalse(result.preview().eligible());

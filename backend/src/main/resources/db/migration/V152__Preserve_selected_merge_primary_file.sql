@@ -1,0 +1,1 @@
+ALTER TABLE book_file ADD COLUMN preferred_primary BOOLEAN NOT NULL DEFAULT FALSE;

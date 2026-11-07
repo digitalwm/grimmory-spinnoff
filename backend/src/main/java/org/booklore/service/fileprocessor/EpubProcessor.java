@@ -178,7 +178,7 @@ public class EpubProcessor extends AbstractFileProcessor implements BookFileProc
 
         bookEntity.getBookFiles().stream()
             .filter(bf -> bf.getBookType() == BookFileType.EPUB && bf.isBook())
-            .min(Comparator.comparingLong(BookFileEntity::getId))
+            .min(BookFileEntity.preferredOrder())
             .ifPresent(ent -> ent.setFixedLayout(Boolean.TRUE.equals(epubMetadata.getIsFixedLayout())));
     }
 }

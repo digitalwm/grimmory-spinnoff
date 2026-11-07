@@ -115,13 +115,13 @@ public class AudiobookReaderService {
             BookFileType requestedType = BookFileType.valueOf(bookType.toUpperCase());
             return bookEntity.getBookFiles().stream()
                     .filter(bf -> bf.getBookType() == requestedType)
-                    .min(Comparator.comparingLong(BookFileEntity::getId))
+                    .min(BookFileEntity.preferredOrder())
                     .orElseThrow(() -> ApiError.FILE_NOT_FOUND.createException("No file of type " + bookType + " found for book"));
         }
 
         return bookEntity.getBookFiles().stream()
                 .filter(bf -> bf.getBookType() == BookFileType.AUDIOBOOK && bf.isBookFormat())
-                .min(Comparator.comparingLong(BookFileEntity::getId))
+                .min(BookFileEntity.preferredOrder())
                 .orElseThrow(() -> ApiError.FILE_NOT_FOUND.createException("No audiobook file found for book " + bookId));
     }
 }

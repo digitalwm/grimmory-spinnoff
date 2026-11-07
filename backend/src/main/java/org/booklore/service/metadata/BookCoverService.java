@@ -199,7 +199,7 @@ public class BookCoverService {
         // Find the audiobook file
         var audiobookFile = bookEntity.getBookFiles().stream()
                 .filter(f -> f.getBookType() == BookFileType.AUDIOBOOK)
-                .min(Comparator.comparingLong(BookFileEntity::getId))
+                .min(BookFileEntity.preferredOrder())
                 .orElseThrow(() -> ApiError.FAILED_TO_REGENERATE_COVER.createException("no audiobook file found"));
 
         BookFileProcessor processor = processorRegistry.getProcessorOrThrow(audiobookFile.getBookType());
@@ -544,7 +544,7 @@ public class BookCoverService {
                 }
                 var match = bookFiles.stream()
                         .filter(bf -> bf.isBookFormat() && bf.getBookType() == format)
-                        .min(Comparator.comparingLong(BookFileEntity::getId));
+                        .min(BookFileEntity.preferredOrder());
                 if (match.isPresent()) {
                     return match.get();
                 }
@@ -553,7 +553,7 @@ public class BookCoverService {
 
         return bookFiles.stream()
                 .filter(this::isEbookBookFile)
-                .min(Comparator.comparingLong(BookFileEntity::getId))
+                .min(BookFileEntity.preferredOrder())
                 .orElse(null);
     }
 
@@ -652,7 +652,7 @@ public class BookCoverService {
         }
         var audiobookFile = bookEntity.getBookFiles().stream()
                 .filter(f -> f.getBookType() == BookFileType.AUDIOBOOK)
-                .min(Comparator.comparingLong(BookFileEntity::getId))
+                .min(BookFileEntity.preferredOrder())
                 .orElse(null);
 
         if (audiobookFile == null) {

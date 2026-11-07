@@ -62,7 +62,7 @@ public interface BookMapperV2 {
         BookFileEntity audiobookFile = bookEntity.getBookFiles() != null
                 ? bookEntity.getBookFiles().stream()
                     .filter(bf -> bf.getBookType() == BookFileType.AUDIOBOOK && bf.isBook())
-                    .min(Comparator.comparingLong(BookFileEntity::getId))
+                    .min(BookFileEntity.preferredOrder())
                     .orElse(null)
                 : null;
 
@@ -155,6 +155,8 @@ public interface BookMapperV2 {
 
         if (bookFormats.isEmpty()) return null;
 
+        var preferred = bookFormats.stream().filter(BookFileEntity::isPreferredPrimary).findFirst();
+        if (preferred.isPresent()) return preferred.get();
         BookFileEntity firstBook = bookFormats.getFirst();
         LibraryEntity library = firstBook.getBook() != null ? firstBook.getBook().getLibrary() : null;
 

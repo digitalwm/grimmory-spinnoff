@@ -80,7 +80,7 @@ public class AudiobookProcessor extends AbstractFileProcessor implements BookFil
     public boolean generateAudiobookCover(BookEntity bookEntity) {
         var audiobookFile = bookEntity.getBookFiles().stream()
                 .filter(f -> f.getBookType() == BookFileType.AUDIOBOOK)
-                .min(Comparator.comparingLong(BookFileEntity::getId))
+                .min(BookFileEntity.preferredOrder())
                 .orElse(null);
         if (audiobookFile == null) {
             return false;
@@ -247,7 +247,7 @@ public class AudiobookProcessor extends AbstractFileProcessor implements BookFil
 
         BookFileEntity audiobookFile = bookEntity.getBookFiles().stream()
                 .filter(bf -> bf.getBookType() == BookFileType.AUDIOBOOK && bf.isBook())
-                .min(Comparator.comparingLong(BookFileEntity::getId))
+                .min(BookFileEntity.preferredOrder())
                 .orElse(null);
 
         if (audiobookFile == null) {

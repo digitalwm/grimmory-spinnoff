@@ -136,36 +136,11 @@ public class CatalogueReconciliationService {
         quarantine.lock();
         List<Long> ids = validateIds(bookIds, targetBookId);
         if (store.rows("book", "id", ids, true).size() != ids.size()) throw ApiError.CONFLICT.createException("Book records changed. Refresh this group before merging.");
-        Inspection inspection = inspect(libraryId, ids, targetBookId, true);
-        List<String> reasons = quickReviewReasons(inspection, ids);
+        Inspection inspection = inspect(libraryId, ids, targetBookId, true, false);
+        List<String> reasons = inspection.preview.reasons;
         if (!reasons.isEmpty()) return new QuickMergeResult("REVIEW_REQUIRED", null, inspection.preview, reasons);
         Receipt receipt = applyInspection(actor, libraryId, ids, targetBookId, inspection, inspection.preview.token);
         return new QuickMergeResult("MERGED", receipt, null, List.of());
-    }
-
-    private List<String> quickReviewReasons(Inspection inspection, List<Long> requested) {
-        Preview preview = inspection.preview;
-        List<String> reasons = new ArrayList<>(preview.reasons);
-        if (!new HashSet<>(requested).equals(new HashSet<>(preview.members.stream().map(Member::bookId).toList())))
-            reasons.add("Additional matching records were found outside the selected group.");
-        Map<String, Long> retainedFormats = preview.files.stream().filter(file -> file.action.equals("KEEP"))
-                .collect(java.util.stream.Collectors.groupingBy(FilePlan::bookType, java.util.stream.Collectors.counting()));
-        if (retainedFormats.values().stream().anyMatch(count -> count > 1)) reasons.add("Different editions or file contents exist in the same format.");
-        for (String field : List.of("language", "series_name", "series_number")) {
-            var values = preview.metadataDifferences.getOrDefault(field, Map.of()).values().stream()
-                    .filter(value -> value != null && !value.isBlank()).map(CatalogueReconciliationService::normalise).distinct().toList();
-            if (values.size() > 1) reasons.add("Conflicting " + field.replace('_', ' ') + " metadata needs review.");
-        }
-        List<Map<String, String>> metadata = inspection.before.getOrDefault("book_metadata", List.of());
-        Map<String, String> target = metadata.stream().filter(row -> Long.toString(preview.targetBookId).equals(row.get("book_id"))).findFirst().orElse(Map.of());
-        for (var source : metadata) if (!Long.toString(preview.targetBookId).equals(source.get("book_id"))) {
-            for (var column : source.entrySet()) if (column.getKey().endsWith("_locked") && ("1".equals(column.getValue()) || "true".equalsIgnoreCase(column.getValue()))) {
-                String field = column.getKey().substring(0, column.getKey().length() - 7);
-                if (!source.containsKey(field) || !Objects.equals(source.get(field), target.get(field))) reasons.add("A source record contains locked metadata that needs review.");
-            }
-        }
-        if (!preview.eligible && reasons.isEmpty()) reasons.add("This group needs manual review.");
-        return reasons.stream().distinct().toList();
     }
 
     private Receipt applyInspection(BookLoreUser actor, long libraryId, List<Long> ids, long targetBookId,
@@ -211,10 +186,11 @@ public class CatalogueReconciliationService {
         }
         FileRow target = inspection.files.stream().filter(file -> file.bookId == targetBookId).findFirst().orElseThrow();
         Path targetRoot = Path.of(target.root).toAbsolutePath().normalize();
+        long preferredFileId = preferredTargetFile(inspection.before, targetBookId);
         for (FilePlan file : current.files) if (file.fileId == file.retainedFileId) {
             Path path = Path.of(file.path);
             String subPath = targetRoot.relativize(path.getParent()).toString();
-            if (jdbc.update("UPDATE book_file SET book_id=?,file_sub_path=? WHERE id=?", targetBookId, subPath, file.fileId) != 1)
+            if (jdbc.update("UPDATE book_file SET book_id=?,file_sub_path=?,preferred_primary=? WHERE id=?", targetBookId, subPath, file.fileId == preferredFileId, file.fileId) != 1)
                 throw ApiError.CONFLICT.createException("Retained file records changed. Inspect the group again.");
         }
         store.removeCatalogueRecords(inspection.schema, removedBooks, removedFiles);
@@ -264,21 +240,27 @@ public class CatalogueReconciliationService {
     }
 
     private Inspection inspect(long libraryId, List<Long> requestedIds, long targetBookId, boolean lock) {
+        return inspect(libraryId, requestedIds, targetBookId, lock, true);
+    }
+
+    private Inspection inspect(long libraryId, List<Long> requestedIds, long targetBookId, boolean lock, boolean expand) {
         List<Long> ids = validateIds(requestedIds, targetBookId);
         List<FileRow> all = libraryFiles(libraryId);
-        // Include every reference to the selected paths; newly included books are visible in the preview.
-        Map<Long, List<String>> libraryAuthors = authorsInLibrary(libraryId);
-        Set<Long> expanded = new TreeSet<>(ids);
-        boolean changed;
-        do {
-            Set<String> keys = new HashSet<>(all.stream().filter(file -> expanded.contains(file.bookId)).map(FileRow::key).toList());
-            Set<String> identities = new HashSet<>(all.stream().filter(file -> expanded.contains(file.bookId))
-                    .map(file -> candidateKey(file, libraryAuthors)).filter(key -> !key.startsWith("unique-")).toList());
-            changed = false;
-            for (FileRow file : all) if (keys.contains(file.key()) || identities.contains(candidateKey(file, libraryAuthors))) changed |= expanded.add(file.bookId);
-            if (expanded.size() > 20) throw ApiError.CONFLICT.createException("This connected group has more than 20 records and requires a separate audit.");
-        } while (changed);
-        ids = List.copyOf(expanded);
+        // Only explicit inspection expands candidates; direct merges honor the selected records.
+        if (expand) {
+            Map<Long, List<String>> libraryAuthors = authorsInLibrary(libraryId);
+            Set<Long> expanded = new TreeSet<>(ids);
+            boolean changed;
+            do {
+                Set<String> keys = new HashSet<>(all.stream().filter(file -> expanded.contains(file.bookId)).map(FileRow::key).toList());
+                Set<String> identities = new HashSet<>(all.stream().filter(file -> expanded.contains(file.bookId))
+                        .map(file -> candidateKey(file, libraryAuthors)).filter(key -> !key.startsWith("unique-")).toList());
+                changed = false;
+                for (FileRow file : all) if (keys.contains(file.key()) || identities.contains(candidateKey(file, libraryAuthors))) changed |= expanded.add(file.bookId);
+                if (expanded.size() > 20) throw ApiError.CONFLICT.createException("This connected group has more than 20 records and requires a separate audit.");
+            } while (changed);
+            ids = List.copyOf(expanded);
+        }
         List<Long> selectedIds = ids;
         List<FileRow> files = all.stream().filter(file -> selectedIds.contains(file.bookId)).toList();
         if (files.stream().map(FileRow::bookId).distinct().count() != ids.size() || files.size() > 40)
@@ -288,6 +270,7 @@ public class CatalogueReconciliationService {
         Map<String, List<Map<String, String>>> before = store.snapshot(schema, ids, files.stream().map(FileRow::fileId).toList(), lock);
         List<Map<String, String>> roots = store.rows("library_path", "id", files.stream().map(FileRow::pathId).distinct().toList(), lock);
         before.put("library_path", roots);
+        before.put("library", store.rows("library", "id", List.of(libraryId), lock));
         // Discovery precedes the locks. Never base a direct merge on values changed during that gap.
         for (FileRow file : files) {
             var book = before.get("book").stream().filter(row -> Long.toString(file.bookId).equals(row.get("id"))).findFirst().orElseThrow();
@@ -356,7 +339,9 @@ public class CatalogueReconciliationService {
         }
         Map<Long, Long> fileTargets = new TreeMap<>();
         Map<String, FileRow> survivors = new HashMap<>();
-        List<FileRow> preferred = files.stream().sorted(Comparator.comparing((FileRow row) -> row.bookId != targetBookId).thenComparing(FileRow::fileId)).toList();
+        long preferredFileId = preferredTargetFile(before, targetBookId);
+        List<FileRow> preferred = files.stream().sorted(Comparator.comparing((FileRow row) -> row.bookId != targetBookId)
+                .thenComparing(row -> row.fileId != preferredFileId).thenComparing(FileRow::fileId)).toList();
         for (FileRow file : preferred) {
             FileCheck checked = checks.get(file.fileId);
             String contentKey = checked == null ? "unverified-" + file.fileId : file.bookType + "\n" + checked.sha256;
@@ -390,7 +375,7 @@ public class CatalogueReconciliationService {
         for (String table : before.keySet()) if (CatalogueReconciliationStore.BOOK_DATA.contains(table) || CatalogueReconciliationStore.FILE_DATA.contains(table)
                 || CatalogueReconciliationStore.REVIEW_ONLY.contains(table)) related.put(table, before.get(table).size());
         Map<String, Map<Long, String>> differences = differences(before.getOrDefault("book_metadata", List.of()));
-        FilePlan anchor = plans.stream().filter(file -> file.bookId == targetBookId).findFirst().orElseThrow();
+        FilePlan anchor = plans.stream().filter(file -> file.fileId == preferredFileId).findFirst().orElseThrow();
         String token = sha(libraryId + "\n" + targetBookId + "\n" + json(plans) + "\n" + snapshot + "\n" + quarantine.retentionDays());
         List<Member> members = new ArrayList<>();
         for (FileRow file : files) if (members.stream().noneMatch(member -> member.bookId == file.bookId)) members.add(member(file, authors.getOrDefault(file.bookId, List.of())));
@@ -408,7 +393,13 @@ public class CatalogueReconciliationService {
                 (rs, n) -> Map.entry(rs.getLong(1), Path.of(rs.getString(2), rs.getString(3), rs.getString(4)).toAbsolutePath().normalize()), names.toArray());
         if (refs.size() > MAX_LIBRARY_FILES) {reasons.add("Too many file references for a safe interactive quarantine."); return;}
         for (var ref : refs) if (!selectedFiles.contains(ref.getKey())) {
-            try {if (moved.contains(ref.getValue().toRealPath().toString())) reasons.add("Another catalogue record outside this group references a copy selected for quarantine.");}
+            try {String sharedPath = ref.getValue().toRealPath().toString();
+                if (moved.contains(sharedPath)) for (int i = 0; i < plans.size(); i++) {
+                    FilePlan plan = plans.get(i);
+                    if (plan.action.equals("QUARANTINE_COPY") && plan.path.equals(sharedPath))
+                        plans.set(i, new FilePlan(plan.fileId, plan.bookId, plan.path, plan.bookType, plan.sha256, plan.bytes,
+                                "SHARED_REFERENCE", plan.retainedFileId, plan.retainedPath));
+                }}
             catch (Exception ignored) {if (moved.contains(ref.getValue().toString())) reasons.add("An external file reference cannot be verified.");}
         }
     }
@@ -426,6 +417,19 @@ public class CatalogueReconciliationService {
         List<String> names = authors.getOrDefault(file.bookId, List.of()).stream().map(CatalogueReconciliationService::normalise)
                 .filter(name -> !name.isBlank()).distinct().sorted().toList();
         return title.isBlank() || names.isEmpty() ? "unique-" + file.bookId : title + "\n" + String.join("\n", names);
+    }
+
+    private long preferredTargetFile(Map<String, List<Map<String, String>>> before, long targetBookId) {
+        var priority = new org.booklore.convertor.FormatPriorityConverter(mapper).convertToEntityAttribute(
+                before.get("library").getFirst().get("format_priority"));
+        var library = org.booklore.model.entity.LibraryEntity.builder().formatPriority(priority).build();
+        Set<org.booklore.model.entity.BookFileEntity> targetFiles = new HashSet<>();
+        for (var row : before.get("book_file")) if (Long.toString(targetBookId).equals(row.get("book_id"))) {
+            targetFiles.add(org.booklore.model.entity.BookFileEntity.builder().id(Long.valueOf(row.get("id")))
+                    .bookType(org.booklore.model.enums.BookFileType.valueOf(row.get("book_type")))
+                    .isBookFormat(storedBoolean(row.get("is_book"))).preferredPrimary(storedBoolean(row.get("preferred_primary"))).build());
+        }
+        return org.booklore.model.entity.BookEntity.builder().library(library).bookFiles(targetFiles).build().getPrimaryBookFile().getId();
     }
 
     private static boolean storedBoolean(String value) {return "1".equals(value) || "true".equalsIgnoreCase(value);}

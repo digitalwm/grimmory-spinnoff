@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.List;
+import java.util.Comparator;
 
 @Entity
 @Getter
@@ -38,6 +39,10 @@ public class BookFileEntity {
 
     @Column(name = "is_book", nullable = false)
     private boolean isBookFormat;
+
+    @Column(name = "preferred_primary", nullable = false)
+    @Builder.Default
+    private boolean preferredPrimary = false;
 
     @Column(name = "is_folder_based", nullable = false)
     @Builder.Default
@@ -94,6 +99,10 @@ public class BookFileEntity {
     @Convert(converter = AudioFileChapterListConverter.class)
     @Column(name = "chapters_json", columnDefinition = "TEXT")
     private List<AudioFileChapter> chapters;
+
+    public static Comparator<BookFileEntity> preferredOrder() {
+        return Comparator.comparing((BookFileEntity file) -> !file.isPreferredPrimary()).thenComparingLong(BookFileEntity::getId);
+    }
 
     public boolean isBook() {
         return isBookFormat;
