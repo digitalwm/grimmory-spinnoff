@@ -1,5 +1,5 @@
 import { computed, inject, Service, Injector, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, tap, finalize, of, throwError } from 'rxjs';
 import { catchError, map, shareReplay } from 'rxjs/operators';
 import { RxStompService } from '../websocket/rx-stomp.service';
@@ -13,6 +13,11 @@ interface AccessTokenResponse {
   refreshToken: string;
   isDefaultPassword?: boolean;
   expires?: number;
+}
+
+export function isTransientAuthFailure(error: unknown): boolean {
+  return error instanceof HttpErrorResponse &&
+    (error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500);
 }
 
 export class StaleRefreshResponseError extends Error {
@@ -100,7 +105,11 @@ export class AuthService {
   ensureAuthenticated(): Observable<boolean> {
     return this.ensureAccessToken().pipe(
       map(() => true),
-      catchError(() => {
+      catchError(error => {
+        if (isTransientAuthFailure(error) && (this.getInternalAccessToken() || this.getInternalRefreshToken())) {
+          // Keep the existing session during an outage; protected API calls still require server validation.
+          return of(true);
+        }
         if (this.getInternalAccessToken() || this.getInternalRefreshToken()) {
           this.clearSession();
         }

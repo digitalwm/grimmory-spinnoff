@@ -9,12 +9,11 @@ import org.booklore.model.entity.BookEntity;
 import org.booklore.model.entity.BookFileEntity;
 import org.booklore.model.entity.BookMetadataEntity;
 import org.booklore.model.enums.BookFileType;
-import org.booklore.repository.BookRepository;
+
 import org.booklore.util.BookUtils;
 import org.booklore.util.IsbnUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -32,12 +31,11 @@ public class DuplicateDetectionService {
     private static final Pattern UNDERSCORE_HYPHEN_PATTERN = Pattern.compile("[_\\-]");
     private static final Pattern NON_ALPHANUMERIC_PATTERN = Pattern.compile("[^a-z0-9\\s]");
 
-    private final BookRepository bookRepository;
+    private final DuplicateCandidateLoader candidateLoader;
     private final BookMapper bookMapper;
 
-    @Transactional(readOnly = true)
     public List<DuplicateGroup> findDuplicates(DuplicateDetectionRequest request) {
-        List<BookEntity> books = bookRepository.findAllForDuplicateDetection(request.libraryId());
+        List<BookEntity> books = candidateLoader.load(request.libraryId());
         if (books.size() < 2) {
             return List.of();
         }
@@ -207,14 +205,11 @@ public class DuplicateDetectionService {
                 parent.put(book.getId(), book.getId());
             }
 
-            for (int i = 0; i < withAuthors.size(); i++) {
-                for (int j = i + 1; j < withAuthors.size(); j++) {
-                    Set<String> authorsI = normalizedAuthors.get(withAuthors.get(i).getId());
-                    Set<String> authorsJ = normalizedAuthors.get(withAuthors.get(j).getId());
-                    boolean overlap = authorsI.stream().anyMatch(authorsJ::contains);
-                    if (overlap) {
-                        union(parent, withAuthors.get(i).getId(), withAuthors.get(j).getId());
-                    }
+            Map<String, Long> firstByAuthor = new HashMap<>();
+            for (BookEntity book : withAuthors) {
+                for (String author : normalizedAuthors.get(book.getId())) {
+                    Long first = firstByAuthor.putIfAbsent(author, book.getId());
+                    if (first != null) union(parent, book.getId(), first);
                 }
             }
 

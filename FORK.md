@@ -47,6 +47,20 @@ Import requests from stale clients cannot submit a mismatched copied identity wh
 that rejected suggestion remains stored. Existing automatic imports retain their
 embedded-metadata fallback.
 
+## Session resilience during duplicate handling
+
+Duplicate scans load detached card/identity snapshots in four bounded database
+queries, then release the connection before grouping and mapping results. They do
+not hydrate full-library ORM relations. Direct merges query file records only for
+the selected books. Title/author connectivity uses an author index rather than
+comparing every pair in a title group.
+
+If authentication cannot read the database, the JWT filter returns retryable 503
+instead of misreporting a valid session as unauthorized. Frontend refresh failures
+caused by connectivity, throttling or server errors retain the current tokens and
+route; rejected credentials still clear the session. Server-side authorization
+remains required for every protected request.
+
 ## Catalogue duplicates
 
 Open a library's menu, then **Manage library → Find duplicates → Catalogue duplicates**.

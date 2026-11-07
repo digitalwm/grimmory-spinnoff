@@ -245,7 +245,7 @@ public class CatalogueReconciliationService {
 
     private Inspection inspect(long libraryId, List<Long> requestedIds, long targetBookId, boolean lock, boolean expand) {
         List<Long> ids = validateIds(requestedIds, targetBookId);
-        List<FileRow> all = libraryFiles(libraryId);
+        List<FileRow> all = libraryFiles(libraryId, expand ? null : ids);
         // Only explicit inspection expands candidates; direct merges honor the selected records.
         if (expand) {
             Map<Long, List<String>> libraryAuthors = authorsInLibrary(libraryId);
@@ -439,15 +439,23 @@ public class CatalogueReconciliationService {
     private static long root(Map<Long, Long> parents, long id) {while (parents.get(id) != id) {parents.put(id, parents.get(parents.get(id))); id = parents.get(id);} return id;}
     private static void union(Map<Long, Long> parents, long first, long second) {long a = root(parents, first), b = root(parents, second); if (a != b) parents.put(Math.max(a,b), Math.min(a,b));}
 
-    private List<FileRow> libraryFiles(long libraryId) {
+    private List<FileRow> libraryFiles(long libraryId) {return libraryFiles(libraryId, null);}
+
+    private List<FileRow> libraryFiles(long libraryId, List<Long> selectedIds) {
+        List<Object> parameters = new ArrayList<>(); parameters.add(libraryId);
+        String selected = "";
+        if (selectedIds != null) {
+            selected = " AND b.id IN (" + CatalogueReconciliationStore.placeholders(selectedIds.size()) + ")";
+            parameters.addAll(selectedIds);
+        }
+        parameters.add(selectedIds == null ? MAX_LIBRARY_FILES + 1 : 41);
         List<FileRow> rows = jdbc.query("""
                 SELECT b.id,f.id,b.library_path_id,p.path,f.file_sub_path,f.file_name,m.title,f.current_hash,
                        b.metadata_match_score,b.is_physical,b.deleted,f.book_type,f.is_book,f.is_folder_based
                 FROM book_file f JOIN book b ON b.id=f.book_id JOIN library_path p ON p.id=b.library_path_id
                 LEFT JOIN book_metadata m ON m.book_id=b.id WHERE b.library_id=?
-                ORDER BY b.id,f.id LIMIT ?
-                """, (rs, index) -> new FileRow(rs.getLong(1), rs.getLong(2), rs.getLong(3), rs.getString(4), rs.getString(5),
-                rs.getString(6), rs.getString(7), rs.getString(8), rs.getDouble(9), rs.getBoolean(10), rs.getBoolean(11), rs.getString(12), rs.getBoolean(13), rs.getBoolean(14)), libraryId, MAX_LIBRARY_FILES + 1);
+                """ + selected + " ORDER BY b.id,f.id LIMIT ?", (rs, index) -> new FileRow(rs.getLong(1), rs.getLong(2), rs.getLong(3), rs.getString(4), rs.getString(5),
+                rs.getString(6), rs.getString(7), rs.getString(8), rs.getDouble(9), rs.getBoolean(10), rs.getBoolean(11), rs.getString(12), rs.getBoolean(13), rs.getBoolean(14)), parameters.toArray());
         if (rows.size() > MAX_LIBRARY_FILES) throw ApiError.CONFLICT.createException("This library is too large for an interactive scan. A partitioned audit is required.");
         return rows;
     }

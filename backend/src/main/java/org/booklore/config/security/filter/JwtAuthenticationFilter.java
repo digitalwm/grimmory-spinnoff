@@ -51,8 +51,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             } else {
                 log.debug("Invalid token. Rejecting request.");
             }
+        } catch (UsernameNotFoundException ex) {
+            log.debug("Token refers to a user that no longer exists");
         } catch (Exception ex) {
-            log.error("Authentication error: {}", ex.getMessage(), ex);
+            // A valid JWT cannot be checked during database outages. This is not an invalid session.
+            log.warn("Authentication temporarily unavailable: {}", ex.getMessage());
+            response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            response.setHeader("Retry-After", "5");
+            response.setContentType("application/json");
+            response.getWriter().write("{\"message\":\"Service temporarily unavailable. Please retry.\"}");
+            return;
         }
         chain.doFilter(request, response);
     }

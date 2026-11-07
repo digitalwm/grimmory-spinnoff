@@ -2,7 +2,7 @@ import { HttpErrorResponse, HttpEvent, HttpHandlerFn, HttpInterceptorFn, HttpReq
 import { inject } from '@angular/core';
 import { catchError, switchMap } from 'rxjs/operators';
 import { Observable, throwError, defer } from 'rxjs';
-import { AuthService } from '../../shared/service/auth.service';
+import { AuthService, isTransientAuthFailure } from '../../shared/service/auth.service';
 import { API_CONFIG } from '../config/api-config';
 
 export const AuthInterceptorService: HttpInterceptorFn = (req, next: HttpHandlerFn) => {
@@ -29,7 +29,7 @@ export const AuthInterceptorService: HttpInterceptorFn = (req, next: HttpHandler
 
   return next(authReq).pipe(
     catchError((error: HttpErrorResponse) => {
-      if (error.status === 401 && !isAuthRequest) {
+      if (error.status === 401 && isApiRequest && !isAuthRequest) {
         return handle401Error(authService, authReq, next);
       }
       return throwError(() => error);
@@ -41,7 +41,7 @@ function handle401Error(authService: AuthService, request: HttpRequest<unknown>,
   return defer(() => {
     return authService.ensureAccessToken({forceRefresh: true}).pipe(
       catchError(err => {
-        forceLogout(authService);
+        if (!isTransientAuthFailure(err)) forceLogout(authService);
         return throwError(() => err);
       }),
       switchMap(accessToken =>

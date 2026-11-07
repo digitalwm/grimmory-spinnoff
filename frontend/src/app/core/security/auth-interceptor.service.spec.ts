@@ -133,10 +133,10 @@ describe('AuthInterceptorService', () => {
     expect(authService.logout).not.toHaveBeenCalled();
   });
 
-  it('logs out when the refresh request fails', async () => {
+  it.each([0, 408, 429, 500, 503])('keeps the session when refresh temporarily fails with %s', async (status) => {
     authService.getInternalAccessToken.mockReturnValue('expired-token');
     authService.ensureAccessToken.mockReturnValue(
-      throwError(() => new HttpErrorResponse({ status: 500 }))
+      throwError(() => new HttpErrorResponse({ status }))
     );
 
     const next = vi.fn(() => throwError(() => new HttpErrorResponse({ status: 401 })));
@@ -146,7 +146,19 @@ describe('AuthInterceptorService', () => {
       next
     ))).rejects.toBeInstanceOf(HttpErrorResponse);
 
+    expect(authService.logout).not.toHaveBeenCalled();
+  });
+
+  it('logs out when the server definitively rejects the refresh token', async () => {
+    authService.ensureAccessToken.mockReturnValue(throwError(() => new HttpErrorResponse({status:401})));
+    const next=vi.fn(()=>throwError(()=>new HttpErrorResponse({status:401})));
+    await expect(firstValueFrom(interceptor(new HttpRequest('GET',`${apiUrl}/books`),next))).rejects.toBeInstanceOf(HttpErrorResponse);
     expect(authService.logout).toHaveBeenCalledOnce();
+  });
+  it('does not refresh or log out for an unrelated external 401 response', async () => {
+    const next=vi.fn(()=>throwError(()=>new HttpErrorResponse({status:401})));
+    await expect(firstValueFrom(interceptor(new HttpRequest('GET','https://provider.invalid/data'),next))).rejects.toBeInstanceOf(HttpErrorResponse);
+    expect(authService.ensureAccessToken).not.toHaveBeenCalled();expect(authService.logout).not.toHaveBeenCalled();
   });
 
   it('rethrows non-401 errors without logging out', async () => {

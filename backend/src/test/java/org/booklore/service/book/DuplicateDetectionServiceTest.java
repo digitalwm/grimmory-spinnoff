@@ -6,7 +6,7 @@ import org.booklore.model.dto.request.DuplicateDetectionRequest;
 import org.booklore.model.dto.response.DuplicateGroup;
 import org.booklore.model.entity.*;
 import org.booklore.model.enums.BookFileType;
-import org.booklore.repository.BookRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 class DuplicateDetectionServiceTest {
 
     @Mock
-    private BookRepository bookRepository;
+    private DuplicateCandidateLoader candidateLoader;
 
     @Mock
     private BookMapper bookMapper;
@@ -116,7 +116,7 @@ class DuplicateDetectionServiceTest {
     }
 
     private void stubBooks(BookEntity... books) {
-        when(bookRepository.findAllForDuplicateDetection(LIBRARY_ID)).thenReturn(List.of(books));
+        when(candidateLoader.load(LIBRARY_ID)).thenReturn(List.of(books));
     }
 
     // ── General tests ───────────────────────────────────────────
@@ -136,7 +136,7 @@ class DuplicateDetectionServiceTest {
 
         @Test
         void returnsEmptyWhenNoBooksInLibrary() {
-            when(bookRepository.findAllForDuplicateDetection(LIBRARY_ID)).thenReturn(List.of());
+            when(candidateLoader.load(LIBRARY_ID)).thenReturn(List.of());
 
             List<DuplicateGroup> result = service.findDuplicates(allSignals());
 
@@ -892,7 +892,7 @@ class DuplicateDetectionServiceTest {
                         "9780306406157", null);
                 books.add(book);
             }
-            when(bookRepository.findAllForDuplicateDetection(LIBRARY_ID)).thenReturn(books);
+            when(candidateLoader.load(LIBRARY_ID)).thenReturn(books);
 
             List<DuplicateGroup> result = service.findDuplicates(onlyIsbn());
 

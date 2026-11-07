@@ -216,6 +216,20 @@ describe('AuthService', () => {
     expect(rxStompService.deactivate).not.toHaveBeenCalled();
   });
 
+  it.each([0,408,429,500,503])('preserves tokens and the route during temporary refresh failure %s', async (status) => {
+    localStorage.setItem('accessToken_Internal','expired-access');
+    localStorage.setItem('accessToken_Internal_Expiry',String(Date.now()-1000));
+    localStorage.setItem('refreshToken_Internal','refresh-token');
+    const authenticated=firstValueFrom(service.ensureAuthenticated());
+    const request=httpTestingController.expectOne(`${API_CONFIG.BASE_URL}/api/v1/auth/refresh`);
+    if(status===0) request.error(new ProgressEvent('error'));
+    else request.flush('temporary failure',{status,statusText:'Unavailable'});
+    await expect(authenticated).resolves.toBe(true);
+    expect(service.getInternalAccessToken()).toBe('expired-access');
+    expect(service.getInternalRefreshToken()).toBe('refresh-token');
+    expect(rxStompService.deactivate).not.toHaveBeenCalled();
+  });
+
   it('clears the session when expired credentials cannot be refreshed', async () => {
     localStorage.setItem('accessToken_Internal', 'expired-access');
     localStorage.setItem('accessToken_Internal_Expiry', String(Date.now() - 1000));
