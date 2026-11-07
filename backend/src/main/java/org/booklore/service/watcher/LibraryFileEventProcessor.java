@@ -51,6 +51,7 @@ public class LibraryFileEventProcessor implements SmartLifecycle {
     private final ConcurrentMap<Path, ScheduledFuture<?>> pendingDeletes = new ConcurrentHashMap<>();
     private final ConcurrentMap<Path, ScheduledFuture<?>> pendingFolderCreates = new ConcurrentHashMap<>();
     private final Set<Path> filesFromPendingFolder = ConcurrentHashMap.newKeySet();
+    private final ConcurrentMap<Long, java.util.concurrent.atomic.AtomicInteger> suppressedLibraries = new ConcurrentHashMap<>();
     private volatile boolean running;
     private Thread workerThread;
 
@@ -104,6 +105,7 @@ public class LibraryFileEventProcessor implements SmartLifecycle {
     }
 
     public void processEvent(WatchEvent.Kind<?> eventKind, long libraryId, Path fullPath, boolean isDirectory) {
+        if (suppressedLibraries.containsKey(libraryId)) return;
         Path path = fullPath.toAbsolutePath().normalize();
 
         if (eventKind == StandardWatchEventKinds.ENTRY_DELETE) {
@@ -157,7 +159,16 @@ public class LibraryFileEventProcessor implements SmartLifecycle {
         }
     }
 
+    public void suppressLibrary(long libraryId) {
+        suppressedLibraries.computeIfAbsent(libraryId, ignored -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+    }
+
+    public void resumeLibrary(long libraryId) {
+        suppressedLibraries.computeIfPresent(libraryId, (ignored, count) -> count.decrementAndGet() <= 0 ? null : count);
+    }
+
     private void handleEvent(FileEvent event) {
+        if (suppressedLibraries.containsKey(event.libraryId())) return;
         Path path = event.fullPath();
         String fileName = path.getFileName().toString();
         log.info("[PROCESS] '{}' event for '{}'{}", event.eventKind().name(), fileName,

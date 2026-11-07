@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   migration-check:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Flyway Migration Check
     uses: ./.github/workflows/migrations-check.yml
     permissions:
@@ -21,6 +22,7 @@ jobs:
       checkout_ref: ${{ github.sha }}
 
   test-suite:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Test Suite
     needs: [migration-check]
     uses: ./.github/workflows/test-suite.yml
@@ -31,6 +33,7 @@ jobs:
       checkout_ref: ${{ github.sha }}
 
   resolve-refs:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Resolve release ref
     runs-on: ubuntu-latest
 
@@ -62,6 +65,7 @@ jobs:
           echo "from_ref=${from_ref}" >> "$GITHUB_OUTPUT"
 
   semantic-version:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Generate Notes
     needs:
       - resolve-refs
@@ -76,6 +80,7 @@ jobs:
     secrets: inherit
 
   build-frontend:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Build frontend
     needs:
       - semantic-version
@@ -116,6 +121,7 @@ jobs:
           retention-days: 30
 
   build-backend:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Build backend
     needs:
       - semantic-version
@@ -152,6 +158,7 @@ jobs:
           retention-days: 30
 
   build-openapi:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Build OpenAPI document
     needs:
       - semantic-version
@@ -181,6 +188,7 @@ jobs:
           retention-days: 30
 
   draft-release:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Create Draft Release
     runs-on: ubuntu-latest
     needs:

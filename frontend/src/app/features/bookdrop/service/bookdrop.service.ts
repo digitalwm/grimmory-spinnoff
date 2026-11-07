@@ -10,6 +10,7 @@ export enum BookdropFileStatus {
 }
 
 export interface BookdropFinalizePayload {
+  progressId?: string;
   selectAll?: boolean;
   excludedIds?: number[];
   defaultLibraryId?: number;
@@ -20,6 +21,17 @@ export interface BookdropFinalizePayload {
     pathId: number;
     metadata: BookMetadata;
   }[];
+}
+
+export interface BookdropFinalizeProgress {
+  phase: string;
+  processed: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+  currentFile?: string;
+  complete: boolean;
+  updatedAt: string;
 }
 
 export interface BookdropFile {
@@ -111,7 +123,13 @@ export class BookdropService {
     return this.http.post<BookdropFinalizeResult>(`${this.url}/imports/finalize`, payload);
   }
 
-  discardFiles(payload: { selectAll: boolean; excludedIds?: number[]; selectedIds?: number[] }): Observable<void> {
+  getFinalizeProgress(progressId: string): Observable<BookdropFinalizeProgress> {
+    // Progress is mutable while an import runs. Give each poll a unique URL so
+    // browser and reverse-proxy caches cannot keep returning an old snapshot.
+    return this.http.get<BookdropFinalizeProgress>(`${this.url}/imports/finalize/${encodeURIComponent(progressId)}/progress?refresh=${Date.now()}`);
+  }
+
+  discardFiles(payload: { progressId?: string; selectAll: boolean; excludedIds?: number[]; selectedIds?: number[] }): Observable<void> {
     return this.http.post<void>(`${this.url}/files/discard`, payload);
   }
 

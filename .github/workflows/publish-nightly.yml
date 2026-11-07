@@ -13,6 +13,7 @@ on:
 
 jobs:
   resolve_ref:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Resolve Nightly Ref
     runs-on: ubuntu-latest
     permissions:
@@ -48,6 +49,7 @@ jobs:
           echo "nightly_tag=${nightly_tag}" >> "$GITHUB_OUTPUT"
 
   build-and-push:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Build and Push Nightly Image
     needs: [resolve_ref, test-suite]
     runs-on: ubuntu-latest
@@ -129,6 +131,7 @@ jobs:
             type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
 
   export-openapi:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Export Nightly OpenAPI Artifact
     needs: [resolve_ref]
     runs-on: ubuntu-latest
@@ -157,6 +160,7 @@ jobs:
           retention-days: 30
 
   generate-notes:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Generate Notes
     needs:
       - resolve_ref
@@ -170,7 +174,7 @@ jobs:
 
   notify-discord:
     name: Notify Discord (Nightly)
-    if: ${{ always() && (github.event_name == 'schedule' || inputs.post_discord) && needs.generate-notes.result == 'success' && needs.build-and-push.result == 'success' && needs.export-openapi.result == 'success' }}
+    if: ${{ (github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true') && (always() && (github.event_name == 'schedule' || inputs.post_discord) && needs.generate-notes.result == 'success' && needs.build-and-push.result == 'success' && needs.export-openapi.result == 'success') }}
     needs:
       - resolve_ref
       - build-and-push
@@ -190,6 +194,7 @@ jobs:
       predicted_version: ${{ needs.generate-notes.outputs.version }}
 
   test-suite:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Test Suite
     needs: [resolve_ref]
     uses: ./.github/workflows/test-suite.yml

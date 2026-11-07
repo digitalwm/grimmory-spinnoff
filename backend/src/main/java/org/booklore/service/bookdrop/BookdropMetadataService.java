@@ -95,6 +95,13 @@ public class BookdropMetadataService {
         }
 
         Map<MetadataProvider, BookMetadata> metadataMap = metadataRefreshService.fetchMetadataForBook(providers, book);
+        if (metadataMap.isEmpty()) {
+            // Retain embedded metadata when no provider returned a credible identity.
+            entity.setFetchedMetadata(null);
+            entity.setStatus(PENDING_REVIEW);
+            entity.setUpdatedAt(Instant.now());
+            return bookdropFileRepository.save(entity);
+        }
         BookMetadata fetchedMetadata = metadataRefreshService.buildFetchMetadata(initial, book.getId(), refreshOptions, metadataMap);
         String fetchedJson = objectMapper.writeValueAsString(fetchedMetadata);
 

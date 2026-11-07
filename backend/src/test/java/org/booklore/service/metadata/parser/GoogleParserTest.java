@@ -37,6 +37,18 @@ class GoogleParserTest {
 
     private GoogleParser googleParser;
 
+    @Test
+    void automaticSelectionSkipsUnrelatedFirstSearchResult() {
+        var original = BookMetadata.builder().title("Fate on Fire").authors(List.of("E. L. Todd")).build();
+        var wrong = BookMetadata.builder().title("Feudlings").seriesName("Fate on Fire").authors(List.of("Wendy Knight")).build();
+        var correct = BookMetadata.builder().title("Fate on Fire").authors(List.of("E L Todd")).build();
+        var book = Book.builder().metadata(original).build();
+        var request = FetchMetadataRequest.builder().title("Fate on Fire").build();
+        var subject = spy(googleParser);
+        doReturn(List.of(wrong, correct)).when(subject).fetchMetadata(book, request);
+        org.junit.jupiter.api.Assertions.assertSame(correct, subject.fetchTopMetadata(book, request));
+    }
+
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);

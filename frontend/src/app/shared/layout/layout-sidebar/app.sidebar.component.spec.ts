@@ -1,12 +1,15 @@
 import { computed, Signal, signal, WritableSignal } from '@angular/core';
 import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {HttpTestingController} from '@angular/common/http/testing';
+import {QueryClient} from '@tanstack/angular-query-experimental';
 import { BehaviorSubject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageService } from '@openng/optimus-ui/api';
 
 import { getTranslocoModule } from '../../../core/testing/transloco-testing';
-import {createQueryClientHarness} from '../../../core/testing/query-testing';
+import {createQueryClientHarness, flushQueryAsync} from '../../../core/testing/query-testing';
+import {bookQueryKeys} from '../../../features/book/data/book-query-keys';
 import { BookDialogHelperService } from '../../../features/book/service/book-dialog-helper.service';
 import { LibraryHealthService } from '../../../features/book/service/library-health.service';
 import { LibraryService } from '../../../features/book/service/library.service';
@@ -28,6 +31,7 @@ import type { AppearancePreference } from '../../model/app-state.model';
 import { AppSidebarComponent } from './app.sidebar.component';
 
 interface TestUser {
+  id?: number;
   name: string;
   username: string;
   permissions: Record<string, boolean>;
@@ -45,6 +49,8 @@ describe('AppSidebarComponent', () => {
   let hasActiveImport: WritableSignal<boolean>;
   let setAppearancePreference: ReturnType<typeof vi.fn>;
   let appState: WritableSignal<{ appearancePreference: AppearancePreference }>;
+  const authenticated = signal(false);
+  const countsVisible = signal(false);
   const sidebarCollapsed = signal(false);
   const isDesktop = signal(true);
   const currentPath = signal('/dashboard');
@@ -57,10 +63,12 @@ describe('AppSidebarComponent', () => {
     shelfSort: signal({ field: 'name', order: 'asc' }),
     magicShelfSort: signal({ field: 'name', order: 'asc' }),
     closeMobileSidebar: vi.fn(),
-    areSidebarCountsVisible: () => false,
+    areSidebarCountsVisible: () => countsVisible(),
   };
 
   beforeEach(() => {
+    authenticated.set(false);
+    countsVisible.set(false);
     commandPaletteService = { open: vi.fn() };
     currentUser = signal<TestUser | null>(null);
     versionInfo = new BehaviorSubject<AppVersion>({ current: '1.2.3', latest: '1.2.3' });
@@ -97,7 +105,7 @@ describe('AppSidebarComponent', () => {
         },
         { provide: CommandPaletteService, useValue: commandPaletteService },
         { provide: BookDialogHelperService, useValue: { openShelfCreatorDialog: vi.fn(() => Promise.resolve(null)) } },
-        { provide: AuthService, useValue: { logout: vi.fn(), isAuthenticated: () => false } },
+        { provide: AuthService, useValue: { logout: vi.fn(), isAuthenticated: authenticated } },
         { provide: MetadataProgressService, useValue: { activeTasks$, progressUpdates$ } },
         { provide: BookdropFileService, useValue: { hasPendingFiles } },
         { provide: LibraryImportProgressService, useValue: { hasActiveImport } },
@@ -129,6 +137,27 @@ describe('AppSidebarComponent', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
     vi.restoreAllMocks();
+  });
+
+  it('fetches counts without loading pages or refetching on every imported book', async () => {
+    const http = TestBed.inject(HttpTestingController);
+    currentUser.set({id: 1, name: 'Alex', username: 'alex', permissions: {}});
+    authenticated.set(true);
+    countsVisible.set(true);
+    await flushQueryAsync();
+
+    const request = http.expectOne(req => req.url.endsWith('/api/v1/browse/counts'));
+    expect(request.request.params.keys()).toEqual([]);
+    request.flush({authors: 42, series: 23});
+    await flushQueryAsync();
+
+    const queryClient = TestBed.inject(QueryClient);
+    await queryClient.invalidateQueries({queryKey: bookQueryKeys.collections()});
+    await flushQueryAsync();
+    http.expectNone(req => req.url.includes('/api/v1/app/'));
+    http.expectNone(req => req.url.endsWith('/api/v1/browse/counts'));
+    expect(queryClient.getQueryData(['sidebar', 'entity-counts', 1])).toEqual({authors: 42, series: 23});
+    http.verify();
   });
 
   it('opens the command palette from the sidebar search trigger', () => {

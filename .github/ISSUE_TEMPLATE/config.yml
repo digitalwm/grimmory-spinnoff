@@ -1,11 +1,5 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: 💡 Have an idea or suggestion?
-    url: https://github.com/orgs/grimmory-tools/discussions/new?category=feature-requests-ideas
-    about: Share feature requests & ideas in Grimmory Discussions.
-  - name: 🆘 Have a question or need some help?
-    url: https://github.com/orgs/grimmory-tools/discussions/new?category=q-a
-    about: Visit our Q&A forum to ask questions about installing or configuring Grimmory.
-  - name: 💬 Want to chat?
-    url: https://discord.gg/9YJ7HB4n8T
-    about: Join the Grimmory Discord for community conversation.
+  - name: Upstream Grimmory project
+    url: https://github.com/grimmory-tools/grimmory
+    about: Original project and upstream development; report Spinnoff issues in this repository.

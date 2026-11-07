@@ -15,6 +15,7 @@ on:
 
 jobs:
   build-and-push:
+    if: ${{ github.repository == 'grimmory-tools/grimmory' || vars.ENABLE_RELEASE_AUTOMATION == 'true' }}
     name: Build and Push Preview Image
     runs-on: ubuntu-latest
 
@@ -69,10 +70,10 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/grimmory-tools/grimmory:${{ env.preview_tag }}
+            ghcr.io/${{ github.repository }}:${{ env.preview_tag }}
           build-args: |
             APP_VERSION=${{ env.preview_tag }}
             APP_REVISION=${{ env.commit_sha }}
           cache-from: |
             type=gha,scope=image-shared
-            type=registry,ref=ghcr.io/grimmory-tools/grimmory:buildcache
+            type=registry,ref=ghcr.io/${{ github.repository }}:buildcache

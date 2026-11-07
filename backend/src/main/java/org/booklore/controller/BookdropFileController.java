@@ -12,6 +12,7 @@ import org.booklore.model.dto.response.BookdropPatternExtractResult;
 import org.booklore.service.bookdrop.BookDropService;
 import org.booklore.service.bookdrop.BookdropBulkEditService;
 import org.booklore.service.bookdrop.BookdropMonitoringService;
+import org.booklore.service.bookdrop.BookdropFinalizeProgressService;
 import org.booklore.service.bookdrop.FilenamePatternExtractor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -35,6 +36,7 @@ public class BookdropFileController {
     private final BookdropMonitoringService monitoringService;
     private final FilenamePatternExtractor filenamePatternExtractor;
     private final BookdropBulkEditService bookdropBulkEditService;
+    private final BookdropFinalizeProgressService finalizeProgressService;
 
     @Operation(summary = "Get bookdrop notification summary", description = "Retrieve a summary of bookdrop file notifications.")
     @ApiResponse(responseCode = "200", description = "Notification summary returned successfully")
@@ -60,7 +62,7 @@ public class BookdropFileController {
     @PreAuthorize("@securityUtil.canAccessBookdrop() or @securityUtil.isAdmin()")
     public ResponseEntity<Void> discardSelectedFiles(
             @Parameter(description = "Selection request for files to discard") @Valid @RequestBody BookdropSelectionRequest request) {
-        bookDropService.discardSelectedFiles(request.isSelectAll(), request.getExcludedIds(), request.getSelectedIds());
+        bookDropService.discardSelectedFiles(request.isSelectAll(), request.getExcludedIds(), request.getSelectedIds(), request.getProgressId());
         return ResponseEntity.ok().build();
     }
 
@@ -72,6 +74,15 @@ public class BookdropFileController {
             @Parameter(description = "Finalize import request") @Valid @RequestBody BookdropFinalizeRequest request) {
         BookdropFinalizeResult result = bookDropService.finalizeImport(request);
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/imports/finalize/{progressId}/progress")
+    @PreAuthorize("@securityUtil.canAccessBookdrop() or @securityUtil.isAdmin()")
+    public ResponseEntity<BookdropFinalizeProgressService.Progress> getFinalizeProgress(@PathVariable String progressId) {
+        BookdropFinalizeProgressService.Progress progress = finalizeProgressService.get(progressId);
+        return progress == null
+                ? ResponseEntity.notFound().cacheControl(org.springframework.http.CacheControl.noStore()).build()
+                : ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(progress);
     }
 
     @Operation(summary = "Rescan bookdrop folder", description = "Trigger a rescan of the bookdrop folder for new files.")

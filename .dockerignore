@@ -3,6 +3,7 @@
 assets
 deploy
 docs
+calibre-importer
 scratch
 node_modules
 .pnpm-store

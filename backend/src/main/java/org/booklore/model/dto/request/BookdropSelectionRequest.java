@@ -6,6 +6,7 @@ import java.util.List;
 
 @Data
 public class BookdropSelectionRequest {
+    private String progressId;
     private boolean selectAll;
     private List<Long> excludedIds;
     private List<Long> selectedIds;

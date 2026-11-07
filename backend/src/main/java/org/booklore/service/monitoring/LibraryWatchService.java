@@ -193,6 +193,10 @@ public class LibraryWatchService implements SmartLifecycle {
         log.debug("Unregistered library {} from monitoring", libraryId);
     }
 
+    public void suppressLibraryEvents(long libraryId) { eventProcessor.suppressLibrary(libraryId); }
+
+    public void resumeLibraryEvents(long libraryId) { eventProcessor.resumeLibrary(libraryId); }
+
     public boolean registerPath(Path path, long libraryId) {
         if (!Files.exists(path)) {
             log.warn("Cannot register path that does not exist: {}", path);

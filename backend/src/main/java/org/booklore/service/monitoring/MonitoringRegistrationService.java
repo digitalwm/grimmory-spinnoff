@@ -54,6 +54,10 @@ public class MonitoringRegistrationService {
         libraryWatchService.unregisterLibrary(libraryId);
     }
 
+    public void suppressLibraryEvents(Long libraryId) { libraryWatchService.suppressLibraryEvents(libraryId); }
+
+    public void resumeLibraryEvents(Long libraryId) { libraryWatchService.resumeLibraryEvents(libraryId); }
+
     public void registerLibraryPaths(Long libraryId, Path libraryRoot) {
         libraryWatchService.registerLibraryPaths(libraryId, libraryRoot);
     }

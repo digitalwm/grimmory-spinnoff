@@ -1,9 +1,12 @@
-import {Component, DestroyRef, inject, OnInit, QueryList, signal, ViewChildren} from '@angular/core';
+import {ChangeDetectorRef, Component, DestroyRef, inject, OnInit, QueryList, signal, ViewChildren} from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {startWith, take, tap} from 'rxjs/operators';
+import {startWith, take, tap, exhaustMap, takeWhile, catchError} from 'rxjs/operators';
+import {timer, of} from 'rxjs';
+import {Subscription} from 'rxjs';
 import {PageTitleService} from "../../../../shared/service/page-title.service";
 
-import {BookdropFile, BookdropFinalizePayload, BookdropFinalizeResult, BookdropService, FileExtractionResult, BulkEditRequest as BackendBulkEditRequest, BulkEditResult as BackendBulkEditResult} from '../../service/bookdrop.service';
+import {BookdropFile, BookdropFinalizePayload, BookdropFinalizeResult, BookdropFinalizeProgress, BookdropService, FileExtractionResult, BulkEditRequest as BackendBulkEditRequest, BulkEditResult as BackendBulkEditResult} from '../../service/bookdrop.service';
+import {BookdropFileService} from '../../service/bookdrop-file.service';
 import {LibraryService} from '../../../book/service/library.service';
 import {Library} from '../../../book/model/library.model';
 
@@ -66,7 +69,9 @@ export interface BookdropFileUI {
   ],
 })
 export class BookdropFileReviewComponent implements OnInit {
+  private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly bookdropService = inject(BookdropService);
+  private readonly bookdropFileService = inject(BookdropFileService);
   private readonly libraryService = inject(LibraryService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly destroyRef = inject(DestroyRef);
@@ -90,6 +95,12 @@ export class BookdropFileReviewComponent implements OnInit {
   copiedFlags: Record<number, boolean> = {};
   readonly loading = signal(true);
   saving = false;
+  finalizeProgress: BookdropFinalizeProgress | null = null;
+  processingAction: 'delete' | 'finalize' | null = null;
+  progressPollingError = false;
+  private progressCompletionHandled = false;
+  private finalizeProgressPolling?: Subscription;
+  private pageLoadRequestId = 0;
   includeCoversOnCopy = true;
 
   pageSize = 150;
@@ -179,10 +190,18 @@ export class BookdropFileReviewComponent implements OnInit {
   }
 
   loadPage(page: number): void {
+    const requestId = ++this.pageLoadRequestId;
+    this.loading.set(true);
     this.bookdropService.getPendingFiles(page, this.pageSize)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: response => {
+          if (requestId !== this.pageLoadRequestId) return;
+          const lastPage = Math.max(0, Math.ceil(response.page.totalElements / this.pageSize) - 1);
+          if (page > lastPage) {
+            this.loadPage(lastPage);
+            return;
+          }
           this.bookdropFileUis = response.content.map(file => {
             const cached = this.fileUiCache[file.id];
             if (cached) {
@@ -207,10 +226,13 @@ export class BookdropFileReviewComponent implements OnInit {
           this.currentPage = page;
           this.loading.set(false);
           this.syncCurrentPageSelection();
+          this.changeDetector.markForCheck();
         },
         error: err => {
+          if (requestId !== this.pageLoadRequestId) return;
           console.error('Error loading files:', err);
           this.loading.set(false);
+          this.changeDetector.markForCheck();
         }
       });
   }
@@ -408,24 +430,7 @@ export class BookdropFileReviewComponent implements OnInit {
       });
       return;
     }
-
-    this.confirmationService.confirm({
-      message: this.t.translate('bookdrop.fileReview.toast.confirmFinalizeMessage', {count: selectedCount}),
-      header: this.t.translate('bookdrop.fileReview.toast.confirmFinalizeHeader'),
-      icon: 'pi pi-exclamation-triangle',
-      acceptLabel: this.t.translate('bookdrop.fileReview.toast.confirmFinalizeAccept'),
-      rejectLabel: this.t.translate('common.cancel'),
-      rejectButtonProps: {
-        severity: 'secondary',
-        outlined: true
-      },
-      acceptButtonProps: {
-        severity: 'success',
-        outlined: true
-      },
-      acceptIcon: 'pi pi-check',
-      accept: () => this.finalizeImport(),
-    });
+    this.finalizeImport();
   }
 
   confirmDelete(): void {
@@ -454,7 +459,8 @@ export class BookdropFileReviewComponent implements OnInit {
         outlined: true
       },
       accept: () => {
-        const payload: { selectAll: boolean; excludedIds?: number[]; selectedIds?: number[] } = {
+        const payload: { progressId: string; selectAll: boolean; excludedIds?: number[]; selectedIds?: number[] } = {
+          progressId: this.startProgress('delete', selectedCount),
           selectAll: this.selectAllAcrossPages,
         };
 
@@ -466,8 +472,10 @@ export class BookdropFileReviewComponent implements OnInit {
             .map(file => file.file.id);
         }
 
+        this.saving = true;
         this.bookdropService.discardFiles(payload).subscribe({
           next: () => {
+            this.stopProgress();
             this.messageService.add({
               severity: 'success',
               summary: this.t.translate('bookdrop.fileReview.toast.filesDeletedSummary'),
@@ -478,10 +486,12 @@ export class BookdropFileReviewComponent implements OnInit {
 
             this.selectAllAcrossPages = false;
             this.excludedFiles.clear();
+            this.bookdropFileService.refresh();
             this.loadPage(this.currentPage);
           },
           error: (err) => {
             console.error('Error deleting files:', err);
+            this.stopProgress();
             this.messageService.add({
               severity: 'error',
               summary: this.t.translate('bookdrop.fileReview.toast.deleteFailedSummary'),
@@ -537,6 +547,7 @@ export class BookdropFileReviewComponent implements OnInit {
     });
 
     const payload: BookdropFinalizePayload = {
+      progressId: this.startProgress('finalize', this.selectAllAcrossPages ? this.totalRecords - this.excludedFiles.size : files.length),
       selectAll: this.selectAllAcrossPages,
       excludedIds: this.selectAllAcrossPages ? Array.from(this.excludedFiles) : undefined,
       defaultLibraryId: this.defaultLibraryId ? Number(this.defaultLibraryId) : undefined,
@@ -546,13 +557,16 @@ export class BookdropFileReviewComponent implements OnInit {
 
     this.bookdropService.finalizeImport(payload).subscribe({
       next: (result: BookdropFinalizeResult) => {
-        this.saving = false;
+        const completionAlreadyReported = this.progressCompletionHandled;
+        this.stopProgress();
 
-        this.messageService.add({
-          severity: 'success',
-          summary: this.t.translate('bookdrop.fileReview.toast.importCompleteSummary'),
-          detail: this.t.translate('bookdrop.fileReview.toast.importCompleteDetail'),
-        });
+        if (!completionAlreadyReported) {
+          this.messageService.add({
+            severity: 'success',
+            summary: this.t.translate('bookdrop.fileReview.toast.importCompleteSummary'),
+            detail: this.t.translate('bookdrop.fileReview.toast.importCompleteDetail'),
+          });
+        }
 
         this.dialogLauncherService.openBookdropFinalizeResultDialog(result);
 
@@ -564,9 +578,15 @@ export class BookdropFileReviewComponent implements OnInit {
           .map(r => r.fileId!));
 
         successfulIds.forEach(id => delete this.fileUiCache[id]);
+        this.bookdropFileService.refresh();
 
         this.selectAllAcrossPages = false;
         this.excludedFiles.clear();
+
+        if (completionAlreadyReported) {
+          this.loadPage(this.currentPage);
+          return;
+        }
 
         if (failedIds.size > 0) {
           this.bookdropFileUis = this.bookdropFileUis
@@ -580,20 +600,79 @@ export class BookdropFileReviewComponent implements OnInit {
             });
           this.totalRecords = Math.max(0, this.totalRecords - successfulIds.size);
           this.bookdropFileUis.forEach(fileUi => this.fileUiCache[fileUi.file.id] = fileUi);
+          this.changeDetector.markForCheck();
         } else {
           this.loadPage(this.currentPage);
         }
       },
       error: (err) => {
+        const completionAlreadyReported = this.progressCompletionHandled;
         console.error('Error finalizing import:', err);
-        this.messageService.add({
-          severity: 'error',
-          summary: this.t.translate('bookdrop.fileReview.toast.importFailedSummary'),
-          detail: this.t.translate('bookdrop.fileReview.toast.importFailedDetail'),
-        });
+        this.stopProgress();
+        if (completionAlreadyReported) {
+          this.bookdropFileService.refresh();
+          this.loadPage(this.currentPage);
+        } else {
+          this.messageService.add({
+            severity: 'error',
+            summary: this.t.translate('bookdrop.fileReview.toast.importFailedSummary'),
+            detail: this.t.translate('bookdrop.fileReview.toast.importFailedDetail'),
+          });
+        }
         this.saving = false;
       }
     });
+  }
+
+  private startProgress(action: 'delete' | 'finalize', total: number): string {
+    const progressId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.saving = true;
+    this.processingAction = action;
+    this.progressPollingError = false;
+    this.progressCompletionHandled = false;
+    this.finalizeProgress = {phase: action === 'delete' ? 'Preparing deletion' : 'Preparing import', processed: 0, total, succeeded: 0, failed: 0, complete: false, updatedAt: new Date().toISOString()};
+    this.finalizeProgressPolling?.unsubscribe();
+    this.finalizeProgressPolling = timer(0, 700).pipe(
+      exhaustMap(() => this.bookdropService.getFinalizeProgress(progressId).pipe(
+        catchError(() => {
+          this.progressPollingError = true;
+          this.changeDetector.markForCheck();
+          return of(null);
+        }),
+      )),
+      takeWhile(progress => !progress?.complete, true),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(progress => {
+      if (progress) {
+        this.finalizeProgress = progress;
+        this.progressPollingError = false;
+        this.changeDetector.markForCheck();
+        if (progress.complete && this.processingAction === 'finalize' && !this.progressCompletionHandled) {
+          this.progressCompletionHandled = true;
+          this.finalizeProgressPolling?.unsubscribe();
+          this.messageService.add({
+            severity: progress.failed > 0 ? 'warn' : 'success',
+            summary: this.t.translate('finalizeProgress.completedSummary'),
+            detail: this.t.translate('finalizeProgress.completedDetail', {
+              succeeded: progress.succeeded,
+              failed: progress.failed,
+            }),
+          });
+          this.changeDetector.markForCheck();
+        }
+      }
+    });
+    return progressId;
+  }
+
+  private stopProgress(): void {
+    this.saving = false;
+    this.processingAction = null;
+    this.progressPollingError = false;
+    this.progressCompletionHandled = false;
+    this.finalizeProgressPolling?.unsubscribe();
+    this.finalizeProgress = null;
+    this.changeDetector.markForCheck();
   }
 
   private createMetadataForm(original: BookMetadata | undefined, bookdropFileId: number): FormGroup {

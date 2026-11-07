@@ -1,3 +1,16 @@
+# Grimmory Spinnoff
+
+This is Dan's experimental development version of [Grimmory](https://github.com/grimmory-tools/grimmory),
+maintained at **[digitalwm/grimmory-spinnoff](https://github.com/digitalwm/grimmory-spinnoff)**.
+It includes the complete application, local BookDrop improvements, metadata identity
+validation, reduced sidebar query load, the custom calibre importer, and deployment configuration.
+
+**Start here:** [deployment, local improvements, and upstream integration](FORK.md).
+Build this repository to use these changes; the upstream images described below do
+not include Spinnoff changes. Original history, licensing, and attribution are retained.
+
+---
+
 <div align="center">
 
 <picture>

@@ -110,8 +110,8 @@ ARG APP_REVISION=unknown
 
 LABEL org.opencontainers.image.title="Grimmory" \
     org.opencontainers.image.description="Grimmory: a self-hosted, multi-user digital library with smart shelves, auto metadata, Kobo and KOReader sync, BookDrop imports, OPDS support, and a built-in reader for EPUB, PDF, and comics." \
-    org.opencontainers.image.source="https://github.com/grimmory-tools/grimmory" \
-    org.opencontainers.image.url="https://github.com/grimmory-tools/grimmory" \
+    org.opencontainers.image.source="https://github.com/digitalwm/grimmory-spinnoff" \
+    org.opencontainers.image.url="https://github.com/digitalwm/grimmory-spinnoff" \
     org.opencontainers.image.documentation="https://grimmory.org/docs/getting-started" \
     org.opencontainers.image.version=$APP_VERSION \
     org.opencontainers.image.revision=$APP_REVISION \

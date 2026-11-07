@@ -7,6 +7,7 @@ import java.util.List;
 
 @Data
 public class BookdropFinalizeRequest {
+    private String progressId;
     private Boolean selectAll;
     private List<Long> excludedIds;
     private List<BookdropFinalizeFile> files;

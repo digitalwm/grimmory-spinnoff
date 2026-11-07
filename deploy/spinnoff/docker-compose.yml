@@ -1,0 +1,133 @@
+services:
+  grimmory:
+    build:
+      context: ${GRIMMORY_SOURCE:-./grimmory}
+    image: grimmory/grimmory:local-bookdrop
+    # Convenience tag:
+    # image: grimmory/grimmory:<release-version>
+    # Alternative: ghcr.io/grimmory-tools/grimmory:<release-version>
+    # To build from source instead: comment out 'image' and uncomment below
+    # build: .
+    container_name: grimmory
+    environment:
+      - USER_ID=${APP_USER_ID}
+      - GROUP_ID=${APP_GROUP_ID}
+      - TZ=${TZ}
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_USERNAME=${DB_USER}
+      - DATABASE_PASSWORD=${DB_PASSWORD}
+      - API_DOCS_ENABLED=${API_DOCS_ENABLED}
+      - DISK_TYPE=${DISK_TYPE}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "6060:6060"
+    volumes:
+      - ./data:/app/data
+      - ${BOOKS_PATH:-/data/epub-new}:/books
+      - ${BOOKDROP_PATH:-/data/epub-bookdrop}:/bookdrop
+    healthcheck:
+      test: wget -q -O - http://localhost:6060/api/v1/healthcheck
+      interval: 60s
+      retries: 5
+      start_period: 60s
+      timeout: 10s
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=false"
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      internal:
+        ipv4_address: 10.5.0.50
+    logging:
+      driver: "syslog"
+      options:
+        tag: "Grimmory/{{.ImageName}}/{{.Name}}/{{.ID}}"
+        labels: "grimmory"
+
+  calibre-importer:
+    build:
+      context: ${CALIBRE_IMPORTER_SOURCE:-./calibre-importer}
+    container_name: calibre-importer
+    environment:
+      - TZ=${TZ}
+      - APP_PORT=8090
+      - GRIMMORY_BASE_URL=http://grimmory:6060
+      - GRIMMORY_USERNAME=${GRIMMORY_USERNAME}
+      - GRIMMORY_PASSWORD=${GRIMMORY_PASSWORD}
+      - GRIMMORY_LOW_SCORE_THRESHOLD=${GRIMMORY_LOW_SCORE_THRESHOLD}
+      - GRIMMORY_HTTP_RETRY_ATTEMPTS=${GRIMMORY_HTTP_RETRY_ATTEMPTS:-3}
+      - GRIMMORY_HTTP_RETRY_DELAY_SECONDS=${GRIMMORY_HTTP_RETRY_DELAY_SECONDS:-2}
+      - GRIMMORY_UPDATE_TIMEOUT_SECONDS=${GRIMMORY_UPDATE_TIMEOUT_SECONDS:-60}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS}
+      - LLM_RETRY_ATTEMPTS=${LLM_RETRY_ATTEMPTS:-3}
+      - GRIMMORY_BOOKS_ROOT=/books
+      - GRIMMORY_IMPORT_TARGET=/bookdrop
+      - CONSOLIDATION_EPUB=/sources/epub
+      - CONSOLIDATION_CLEAN=/sources/epub_clean
+      - CONSOLIDATION_MANAGED=/sources/epub-managed
+      - LLM_BOOK_SAMPLE_PAGES=${LLM_BOOK_SAMPLE_PAGES:-2}
+      - REVIEW_QUEUE_PATH=/data/llm-review-queue.json
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./data:/data
+      - ${BOOKS_PATH:-/data/epub-new}:/books:ro
+      - ${BOOKDROP_PATH:-/data/epub-bookdrop}:/bookdrop:rw
+      - ${SOURCE_EPUB_PATH:-/data/epub}:/sources/epub:rw
+      - ${SOURCE_CLEAN_PATH:-/data/epub_clean}:/sources/epub_clean:rw
+      - ${SOURCE_MANAGED_PATH:-/data/epub-managed/managed-library}:/sources/epub-managed:rw
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=false"
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      internal:
+        ipv4_address: 10.5.0.52
+    logging:
+      driver: "syslog"
+      options:
+        tag: "calibre-importer"
+
+  mariadb:
+    image: lscr.io/linuxserver/mariadb:11.4.5
+    environment:
+      - PUID=${DB_USER_ID}
+      - PGID=${DB_GROUP_ID}
+      - TZ=${TZ}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./mariadb/config:/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    labels:
+      - "traefik.enable=false"
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      internal:
+        ipv4_address: 10.5.0.51
+    logging:
+      driver: "syslog"
+      options:
+        tag: "Grimmory/{{.ImageName}}/{{.Name}}/{{.ID}}"
+        labels: "grimmory"
+
+networks:
+  internal:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        -
+          subnet: 10.5.0.48/29

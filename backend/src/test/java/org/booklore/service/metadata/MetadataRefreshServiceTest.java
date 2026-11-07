@@ -39,6 +39,21 @@ import java.time.LocalDate;
 @ExtendWith(MockitoExtension.class)
 class MetadataRefreshServiceTest {
 
+    @Test
+    void rejectsUnrelatedProviderBeforeItCanSupplyFieldsToTheMerge() {
+        BookParser parser = mock(BookParser.class);
+        when(parserMap.get(MetadataProvider.GoodReads)).thenReturn(parser);
+        when(parser.isEnabled()).thenReturn(true);
+        when(parser.fetchTopMetadata(any(), any())).thenReturn(BookMetadata.builder()
+                .title("Feudlings").seriesName("Fate on Fire").authors(List.of("Wendy Knight"))
+                .provider(MetadataProvider.GoodReads).build());
+        Book original = Book.builder().metadata(BookMetadata.builder().title("Fate on Fire")
+                .authors(List.of("E. L. Todd")).build()).build();
+        assertThat(service.fetchMetadataForBook(List.of(MetadataProvider.GoodReads), original)).isEmpty();
+    }
+
+
+
     @Mock private LibraryRepository libraryRepository;
     @Mock private MetadataFetchJobRepository metadataFetchJobRepository;
     @Mock private BookMapper bookMapper;
@@ -169,8 +184,8 @@ class MetadataRefreshServiceTest {
         BookParser amazonParser = mock(BookParser.class);
         BookParser googleParser = mock(BookParser.class);
 
-        BookMetadata amazonMeta = BookMetadata.builder().provider(MetadataProvider.Amazon).title("Amazon Title").build();
-        BookMetadata googleMeta = BookMetadata.builder().provider(MetadataProvider.Google).title("Google Title").build();
+        BookMetadata amazonMeta = BookMetadata.builder().provider(MetadataProvider.Amazon).title("Test: Amazon Edition").build();
+        BookMetadata googleMeta = BookMetadata.builder().provider(MetadataProvider.Google).title("Test: Google Edition").build();
 
         when(parserMap.get(MetadataProvider.Amazon)).thenReturn(amazonParser);
         when(parserMap.get(MetadataProvider.Google)).thenReturn(googleParser);
@@ -185,8 +200,8 @@ class MetadataRefreshServiceTest {
                 List.of(MetadataProvider.Amazon, MetadataProvider.Google), book);
 
         assertThat(result).hasSize(2);
-        assertThat(result.get(MetadataProvider.Amazon).getTitle()).isEqualTo("Amazon Title");
-        assertThat(result.get(MetadataProvider.Google).getTitle()).isEqualTo("Google Title");
+        assertThat(result.get(MetadataProvider.Amazon).getTitle()).isEqualTo("Test: Amazon Edition");
+        assertThat(result.get(MetadataProvider.Google).getTitle()).isEqualTo("Test: Google Edition");
     }
 
     @Test

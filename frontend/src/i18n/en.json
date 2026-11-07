@@ -1952,6 +1952,26 @@
       "rescanTooltip": "Manually trigger a rescan of the Bookdrop folder",
       "loadingMessage": "Loading Bookdrop files. Please wait...",
       "savingMessage": "Organizing and moving files to their designated libraries. Please wait...",
+      "finalizeProgress": {
+        "title": "Adding books to your library",
+        "starting": "Preparing your import…",
+        "of": "of",
+        "booksProcessed": "books processed",
+        "succeeded": "succeeded",
+        "failed": "need attention",
+        "connectionDelayed": "Live progress updates are delayed. The operation may still be running; waiting to reconnect.",
+        "completedSummary": "Finalize finished",
+        "completedDetail": "{{ succeeded }} moved successfully; {{ failed }} need attention.",
+        "keepOpen": "This may take a little while. Progress updates automatically."
+      },
+      "deleteProgress": {
+        "title": "Removing Bookdrop files",
+        "starting": "Preparing deletion…",
+        "booksProcessed": "files removed",
+        "succeeded": "removed",
+        "failed": "could not be removed",
+        "keepOpen": "Deleting selected files and cleaning up empty folders."
+      },
       "importMetadata": "Import Metadata",
       "importMetadataTooltip": "Import fetched metadata for selected files",
       "includeCoversTooltip": "Include book covers when importing fetched metadata",

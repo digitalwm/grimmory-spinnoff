@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Grimmory Library Manager</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Grimmory Library Manager</p>
+        <h1>Library tools</h1>
+        <p class="intro">Consolidate legacy book files and maintain metadata from one place.</p>
+        <nav class="tabbar" role="tablist" aria-label="Library tools">
+          <button id="repairTabButton" class="tab-button active" role="tab" aria-selected="true" aria-controls="tab-repair">Metadata repair</button>
+          <button id="consolidationTabButton" class="tab-button" role="tab" aria-selected="false" aria-controls="tab-consolidation">Collect legacy books</button>
+        </nav>
+      </section>
+      <div id="tab-repair" role="tabpanel" aria-labelledby="repairTabButton">
+      <section class="panel">
+        <div class="actions">
+          <label class="batch-control"><span>Low-score threshold</span><input id="repairThresholdInput" type="number" min="0" max="100" step="1" value="30"></label>
+          <label class="batch-control max-updates-control"><span>Max updates</span><input id="repairLimitInput" type="number" min="1" step="1" value="25"><small>Scan stops after this many repair candidates.</small></label>
+          <label class="batch-control"><span>LLM min confidence</span><input id="repairLlmConfidenceInput" type="number" min="0" max="1" step="0.01" value="0.90"></label>
+          <label class="batch-control checkbox-control"><input id="repairRefreshAfterUpdateInput" type="checkbox"><span>Refresh updated books after apply</span></label>
+          <button id="repairScanButton" class="button secondary">Scan Grimmory</button>
+          <button id="repairHeuristicDryRunButton" class="button secondary">Heuristic Dry Run</button>
+          <button id="repairHeuristicApplyButton" class="button primary">Apply Heuristic Fixes</button>
+          <button id="repairLlmDryRunButton" class="button ghost">LLM Dry Run</button>
+          <button id="repairLlmApplyButton" class="button danger">Apply LLM Fixes</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Config</h2>
+        </div>
+        <div id="config" class="paths"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Active Run</h2>
+          <span id="activeRunSummary" class="muted">Idle</span>
+        </div>
+        <div id="activeRunMeta" class="paths"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Scan Results</h2>
+          <span id="grimmoryRepairSummary" class="muted">No scan yet</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Score</th>
+                <th>Live</th>
+                <th>Status</th>
+                <th>Current</th>
+                <th>Suggested</th>
+              </tr>
+            </thead>
+            <tbody id="grimmoryRepairBody">
+              <tr><td colspan="6" class="muted empty">Run a Grimmory scan to inspect low-score metadata problems.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel review-queue-panel">
+        <div class="panel-header">
+          <h2>Needs review</h2>
+          <div class="review-actions">
+            <span id="reviewQueueSummary" class="muted">No items</span>
+            <button id="markReviewExceptionsButton" class="button secondary" disabled>Mark selected as exceptions</button>
+            <button id="clearReviewExceptionsButton" class="button secondary" disabled>Unmark exceptions</button>
+            <button id="deleteReviewSelectionButton" class="button danger" disabled>Delete selected from library + disk</button>
+          </div>
+        </div>
+        <p class="muted">Select books to permanently remove their Grimmory records and files from disk. Deletion requires confirmation.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th><input id="reviewSelectAll" type="checkbox" aria-label="Select all review books"></th><th>ID</th><th>Current title</th><th>Why</th><th>LLM suggestion</th><th>Scan behavior</th><th>Deletion</th></tr></thead>
+            <tbody id="reviewQueueBody"><tr><td colspan="7" class="muted empty">No books need review.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+      </div>
+      <div id="tab-consolidation" role="tabpanel" aria-labelledby="consolidationTabButton" hidden>
+        <section class="panel consolidation-panel">
+          <div class="panel-header"><div><p class="eyebrow">Library consolidation</p><h2>Collect legacy books into Grimmory</h2></div><span id="consolidationSummary" class="muted">Not scanned</span></div>
+          <p class="muted">Scans <code>/data/epub</code>, <code>/data/epub_clean</code>, and <code>/data/epub-managed/managed-library</code> for EPUB, PDF, MOBI, AZW, FB2, and CBZ/CBR/CB7 files. Imports rename files to “Author - Title” using your approved metadata. Select up to 500 for LLM preparation and automatic import. The table renders 100 rows at a time; “Select current page” applies to the whole page. Approved files move into Grimmory BookDrop for final library review. Failed imports leave the source in place.</p>
+          <div class="actions">
+            <button id="consolidationScan" class="button secondary">Scan source folders</button>
+            <label class="batch-control"><span>Items per page</span><select id="consolidationPageSize"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option></select></label>
+            <button id="selectVisibleConsolidation" class="button ghost">Select current page</button>
+            <button id="consolidationPrepare" class="button secondary" disabled>Prepare selected with LLM</button>
+            <button id="consolidationPrepareImport" class="button primary" disabled>Prepare + auto-import selected</button>
+            <button id="consolidationImport" class="button primary" disabled>Approve and import selected</button>
+            <button id="deleteLegacySelectionButton" class="button danger" disabled>Delete selected from source</button>
+            <button id="consolidationPrev" class="button ghost" disabled>Previous</button>
+            <button id="consolidationNext" class="button ghost" disabled>Next</button>
+            <span id="consolidationSelection" class="muted">0 selected (max 100 per batch)</span>
+          </div>
+          <p id="consolidationMessage" class="muted" role="status"></p>
+          <div class="table-wrap"><table><thead><tr><th></th><th>Source</th><th>Book file</th><th>Current metadata</th><th>LLM proposal (editable)</th><th>Confidence / note</th></tr></thead>
+            <tbody id="consolidationBody"><tr><td colspan="6" class="muted empty">Scan the source folders to build an inventory.</td></tr></tbody></table></div>
+          <div class="actions"><span id="consolidationWindowInfo" class="muted"></span><button id="consolidationShowMore" class="button ghost" hidden>Show next 100</button></div>
+        </section>
+      </div>
+    </main>
+
+    <dialog id="deleteReviewDialog" class="confirm-dialog">
+      <form method="dialog" id="deleteReviewForm">
+        <p class="eyebrow">Permanent action</p>
+        <h2>Delete selected books?</h2>
+        <p>This removes the selected books from Grimmory and deletes their files from disk.</p>
+        <ul id="deleteReviewList"></ul>
+        <label class="confirm-check"><input id="confirmReviewDeleteInput" type="checkbox"> I understand this cannot be undone.</label>
+        <div class="dialog-actions">
+          <button id="cancelReviewDeleteButton" class="button secondary" value="cancel">Cancel</button>
+          <button id="confirmReviewDeleteButton" class="button danger" value="default" disabled>Delete books</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="deleteLegacyDialog" class="confirm-dialog">
+      <form method="dialog">
+        <p class="eyebrow">Delete source files</p>
+        <h2>Delete selected legacy book files?</h2>
+        <p>This permanently deletes these files from their original folders. Grimmory library copies are not affected.</p>
+        <ul id="deleteLegacyList"></ul>
+        <label class="confirm-check"><input id="confirmLegacyDeleteInput" type="checkbox"> I understand these source files will be permanently deleted.</label>
+        <div class="dialog-actions"><button class="button secondary" value="cancel">Cancel</button><button id="confirmLegacyDeleteButton" class="button danger" value="default" disabled>Delete selected files</button></div>
+      </form>
+    </dialog>
+
+    <script>
+      const repairScanButton = document.getElementById("repairScanButton");
+      const repairHeuristicDryRunButton = document.getElementById("repairHeuristicDryRunButton");
+      const repairHeuristicApplyButton = document.getElementById("repairHeuristicApplyButton");
+      const repairLlmDryRunButton = document.getElementById("repairLlmDryRunButton");
+      const repairLlmApplyButton = document.getElementById("repairLlmApplyButton");
+      const grimmoryRepairSummary = document.getElementById("grimmoryRepairSummary");
+      const grimmoryRepairBody = document.getElementById("grimmoryRepairBody");
+      const activeRunSummary = document.getElementById("activeRunSummary");
+      const activeRunMeta = document.getElementById("activeRunMeta");
+      const repairThresholdInput = document.getElementById("repairThresholdInput");
+      const repairLimitInput = document.getElementById("repairLimitInput");
+      const repairLlmConfidenceInput = document.getElementById("repairLlmConfidenceInput");
+      const repairRefreshAfterUpdateInput = document.getElementById("repairRefreshAfterUpdateInput");
+      const reviewQueueSummary = document.getElementById("reviewQueueSummary");
+      const reviewQueueBody = document.getElementById("reviewQueueBody");
+      const reviewSelectAll = document.getElementById("reviewSelectAll");
+      const deleteReviewSelectionButton = document.getElementById("deleteReviewSelectionButton");
+      const markReviewExceptionsButton = document.getElementById("markReviewExceptionsButton");
+      const clearReviewExceptionsButton = document.getElementById("clearReviewExceptionsButton");
+      const deleteReviewDialog = document.getElementById("deleteReviewDialog");
+      const deleteReviewList = document.getElementById("deleteReviewList");
+      const confirmReviewDeleteInput = document.getElementById("confirmReviewDeleteInput");
+      const confirmReviewDeleteButton = document.getElementById("confirmReviewDeleteButton");
+      let reviewQueueItems = [];
+      let pendingDeleteIds = [];
+      let consolidationOffset = 0;
+      let consolidationTotal = 0;
+      let consolidationPageSize = 25;
+      let consolidationDisplayCount = 100;
+      const consolidationSelected = new Set();
+      const consolidationMetadata = new Map();
+      const consolidationBody = document.getElementById("consolidationBody");
+      const consolidationSummary = document.getElementById("consolidationSummary");
+      const consolidationMessage = document.getElementById("consolidationMessage");
+      const consolidationPrepare = document.getElementById("consolidationPrepare");
+      const consolidationPrepareImport = document.getElementById("consolidationPrepareImport");
+      const consolidationImport = document.getElementById("consolidationImport");
+      const deleteLegacyDialog = document.getElementById("deleteLegacyDialog");
+      const deleteLegacyList = document.getElementById("deleteLegacyList");
+      const confirmLegacyDeleteInput = document.getElementById("confirmLegacyDeleteInput");
+      const confirmLegacyDeleteButton = document.getElementById("confirmLegacyDeleteButton");
+      let consolidationRows = [];
+      let pendingLegacyDeleteIds = [];
+      let preparePolling = false;
+      let autoImportAfterPrepare = false;
+      let autoImportIds = [];
+
+      document.getElementById("repairTabButton").addEventListener("click", () => setTab("repair"));
+      document.getElementById("consolidationTabButton").addEventListener("click", () => setTab("consolidation"));
+      function setTab(name) {
+        const repair = name === "repair";
+        document.getElementById("tab-repair").hidden = !repair;
+        document.getElementById("tab-consolidation").hidden = repair;
+        document.getElementById("repairTabButton").classList.toggle("active", repair);
+        document.getElementById("consolidationTabButton").classList.toggle("active", !repair);
+        document.getElementById("repairTabButton").setAttribute("aria-selected", String(repair));
+        document.getElementById("consolidationTabButton").setAttribute("aria-selected", String(!repair));
+      }
+
+      function syncConsolidationActions() {
+        const count = consolidationSelected.size;
+        document.getElementById("consolidationSelection").textContent = `${count} selected (up to 500 for prepare + auto-import)`;
+        consolidationPrepare.disabled = count === 0 || count > 500 || preparePolling;
+        consolidationPrepareImport.disabled = count === 0 || count > 500 || preparePolling;
+        const importable = [...consolidationSelected].every(id => {
+          const data = consolidationMetadata.get(id);
+          return data && data.title.trim() && data.authors.trim();
+        });
+        consolidationImport.disabled = count === 0 || count > 100 || !importable || preparePolling;
+        document.getElementById("deleteLegacySelectionButton").disabled = count === 0 || count > 100 || preparePolling;
+        const pageIds = consolidationRows.map(item => item.id);
+        document.getElementById("selectVisibleConsolidation").textContent = pageIds.length && pageIds.every(id => consolidationSelected.has(id)) ? "Clear current page" : "Select current page";
+      }
+
+      async function loadConsolidationPage() {
+        let response = await fetch(`/api/consolidation/files?offset=${consolidationOffset}&limit=${consolidationPageSize}`, {cache:"no-store"});
+        let data = await response.json();
+        if (consolidationOffset > 0 && consolidationOffset >= data.total) {
+          consolidationOffset = Math.max(0, Math.floor(Math.max(0, data.total - 1) / consolidationPageSize) * consolidationPageSize);
+          response = await fetch(`/api/consolidation/files?offset=${consolidationOffset}&limit=${consolidationPageSize}`, {cache:"no-store"});
+          data = await response.json();
+        }
+        consolidationRows = data.items || [];
+        consolidationTotal = data.total || 0;
+        consolidationSummary.textContent = data.ready ? `${consolidationTotal.toLocaleString()} book file(s) · ${data.errors || 0} source issue(s)` : "Not scanned";
+        if (data.ready) {
+          const counts = data.sourceCounts || {};
+          consolidationSummary.textContent = `epub ${Number(counts.epub || 0).toLocaleString()} · epub_clean ${Number(counts.epub_clean || 0).toLocaleString()} · managed ${Number(counts.epub_managed || 0).toLocaleString()} · total ${consolidationTotal.toLocaleString()}`;
+        }
+        const visibleRows = consolidationRows.slice(0, consolidationDisplayCount);
+        consolidationBody.innerHTML = visibleRows.map(item => {
+          const current = item.currentMetadata || {};
+          const proposal = item.proposal || null;
+          if (item.prepared && !consolidationMetadata.has(item.id)) {
+            consolidationMetadata.set(item.id, {title: proposal?.title || "", authors: (proposal?.authors || []).join("; ")});
+          }
+          const edits = consolidationMetadata.get(item.id);
+          const currentText = [current.title, current.authors].filter(Boolean).join(" · ") || "No embedded metadata";
+          const proposalCell = item.prepared
+            ? `<label class="metadata-edit"><span>Title</span><input class="metadata-title" data-id="${escapeHtml(item.id)}" value="${escapeHtml(edits?.title || "")}" aria-label="Approved title for ${escapeHtml(item.name)}"></label><label class="metadata-edit"><span>Author(s)</span><input class="metadata-authors" data-id="${escapeHtml(item.id)}" value="${escapeHtml(edits?.authors || "")}" aria-label="Approved authors for ${escapeHtml(item.name)}"></label>`
+            : `<span class="muted">Select and prepare with LLM</span>`;
+          const confidence = Number(proposal?.confidence);
+          const needsReview = Boolean(proposal) && (!Number.isFinite(confidence) || confidence < 0.5);
+          const confidenceLabel = proposal ? `${Math.round((Number.isFinite(confidence) ? confidence : 0) * 100)}%` : "";
+          const confidenceBasis = proposal?.confidenceBasis === "filename_metadata_match" ? " · filename + metadata match" : "";
+          const notes = proposal ? `${confidenceLabel}${confidenceBasis} · ${proposal.rationale || (proposal.shouldUpdate ? "LLM identified title and author" : "Manual review needed")}` : "Not prepared";
+          const reviewBadge = needsReview ? `<span class="badge warn confidence-review">Review: below 50%</span>` : "";
+          return `<tr class="${needsReview ? "low-confidence" : ""}"><td><input class="consolidation-select" type="checkbox" value="${escapeHtml(item.id)}" ${consolidationSelected.has(item.id) ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></td><td>${escapeHtml(item.sourceLabel)}</td><td><span>${escapeHtml(item.name)}</span><small class="muted block">${(item.size / 1048576).toFixed(1)} MB · ${escapeHtml(item.relativePath)}</small></td><td>${escapeHtml(currentText)}</td><td>${proposalCell}</td><td>${reviewBadge}<span class="confidence-note">${escapeHtml(notes)}</span></td></tr>`;
+        }).join("") || `<tr><td colspan="6" class="muted empty">${data.ready ? "No supported book files found." : "Scan the source folders to build an inventory."}</td></tr>`;
+        document.getElementById("consolidationPrev").disabled = consolidationOffset <= 0;
+        document.getElementById("consolidationNext").disabled = consolidationOffset + consolidationPageSize >= consolidationTotal;
+        document.getElementById("consolidationWindowInfo").textContent = consolidationRows.length > 100 ? `Showing ${Math.min(visibleRows.length, consolidationRows.length)} of ${consolidationRows.length} books on this page` : "";
+        document.getElementById("consolidationShowMore").hidden = visibleRows.length >= consolidationRows.length;
+        syncConsolidationActions();
+      }
+
+      document.getElementById("consolidationScan").addEventListener("click", async () => {
+        const button = document.getElementById("consolidationScan");
+        button.disabled = true; consolidationMessage.textContent = "Scanning EPUB source folders…";
+        try {
+          const response = await fetch("/api/consolidation/scan", {method:"POST"});
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || "Scan failed");
+          consolidationOffset = 0; consolidationDisplayCount = 100; consolidationSelected.clear(); consolidationMetadata.clear();
+          consolidationMessage.textContent = `Inventory ready: ${data.total.toLocaleString()} EPUB(s).`;
+          await loadConsolidationPage();
+        } catch (error) { consolidationMessage.textContent = error.message; }
+        finally { button.disabled = false; }
+      });
+      consolidationBody.addEventListener("change", event => {
+        if (event.target.matches(".consolidation-select")) {
+          event.target.checked ? consolidationSelected.add(event.target.value) : consolidationSelected.delete(event.target.value);
+          syncConsolidationActions();
+        }
+      });
+      consolidationBody.addEventListener("click", event => {
+        if (event.target.closest("input, button, a, label")) return;
+        const row = event.target.closest("tr");
+        const box = row?.querySelector(".consolidation-select");
+        if (!box) return;
+        box.checked = !box.checked;
+        box.dispatchEvent(new Event("change", {bubbles:true}));
+      });
+      consolidationBody.addEventListener("input", event => {
+        if (!event.target.matches(".metadata-title, .metadata-authors")) return;
+        const id = event.target.dataset.id;
+        const value = consolidationMetadata.get(id) || {title: "", authors: ""};
+        if (event.target.matches(".metadata-title")) value.title = event.target.value;
+        else value.authors = event.target.value;
+        consolidationMetadata.set(id, value);
+        syncConsolidationActions();
+      });
+      document.getElementById("consolidationPageSize").addEventListener("change", event => { consolidationPageSize = Number(event.target.value); consolidationOffset = 0; consolidationDisplayCount = 100; loadConsolidationPage(); });
+      document.getElementById("selectVisibleConsolidation").addEventListener("click", () => {
+        const ids = consolidationRows.map(item => item.id);
+        const clear = ids.length && ids.every(id => consolidationSelected.has(id));
+        for (const id of ids) clear ? consolidationSelected.delete(id) : consolidationSelected.add(id);
+        for (const box of consolidationBody.querySelectorAll(".consolidation-select")) box.checked = consolidationSelected.has(box.value);
+        syncConsolidationActions();
+      });
+      document.getElementById("consolidationPrev").addEventListener("click", () => { consolidationOffset = Math.max(0, consolidationOffset - consolidationPageSize); consolidationDisplayCount = 100; loadConsolidationPage(); });
+      document.getElementById("consolidationNext").addEventListener("click", () => { consolidationOffset += consolidationPageSize; consolidationDisplayCount = 100; loadConsolidationPage(); });
+      document.getElementById("consolidationShowMore").addEventListener("click", () => { consolidationDisplayCount += 100; loadConsolidationPage(); });
+      consolidationPrepare.addEventListener("click", () => prepareSelectedWithLlm(false));
+      consolidationPrepareImport.addEventListener("click", () => prepareSelectedWithLlm(true));
+      async function prepareSelectedWithLlm(autoImport) {
+        if (!consolidationSelected.size || consolidationSelected.size > 500) return;
+        const prompt = autoImport
+          ? `Send the selected books’ filenames, embedded metadata, and available opening text samples to the configured LLM. Automatically import proposals scoring at least 50%; hold lower-confidence books for your review?`
+          : `Send the selected books’ filenames, embedded metadata, and available opening text samples to the configured LLM for review?`;
+        if (!confirm(prompt)) return;
+        autoImportAfterPrepare = autoImport;
+        autoImportIds = autoImport ? [...consolidationSelected] : [];
+        preparePolling = true; syncConsolidationActions(); document.getElementById("consolidationScan").disabled = true; consolidationMessage.textContent = "Starting LLM metadata preparation…";
+        try {
+          const response = await fetch("/api/consolidation/prepare", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ids:[...consolidationSelected], autoImport})});
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || "Could not prepare metadata");
+          pollPrepareStatus();
+        } catch (error) {
+          autoImportAfterPrepare = false; autoImportIds = [];
+          consolidationMessage.textContent = error.message; preparePolling = false; document.getElementById("consolidationScan").disabled = false; syncConsolidationActions();
+        }
+      }
+      async function pollPrepareStatus() {
+        const response = await fetch("/api/consolidation/prepare-status", {cache:"no-store"});
+        const job = await response.json();
+        if (!consolidationSelected.size && job.ids?.length) for (const id of job.ids) consolidationSelected.add(id);
+        consolidationMessage.textContent = `${job.message}: ${job.processed} / ${job.total} · ${job.prepared} ready · ${job.needsReview} need review · ${job.failed} failed`;
+        if (job.running) setTimeout(pollPrepareStatus, 1200);
+        else {
+          if (autoImportAfterPrepare) {
+            autoImportAfterPrepare = false;
+            autoImportIds = [];
+            await new Promise(resolve => setTimeout(resolve, 1200));
+            const importResponse = await fetch("/api/consolidation/import-status", {cache:"no-store"});
+            const importJob = await importResponse.json();
+            if (job.autoImportError) {
+              preparePolling = false;
+              document.getElementById("consolidationScan").disabled = false;
+              consolidationMessage.textContent = `Preparation complete: ${job.autoImportHeld} held for review; auto-import could not start: ${job.autoImportError}`;
+              await loadConsolidationPage();
+              return;
+            }
+            if (importJob.running) {
+              consolidationMessage.textContent = `Preparation complete: ${job.autoImportHeld} held for review; importing ${job.autoImportEligible} qualifying books.`;
+              pollImportStatus();
+              return;
+            }
+            if (!job.autoImportEligible) {
+              preparePolling = false;
+              document.getElementById("consolidationScan").disabled = false;
+              consolidationMessage.textContent = `Preparation complete: ${job.autoImportHeld} book(s) held for review; none met the 50% confidence threshold with complete metadata.`;
+              await loadConsolidationPage();
+              return;
+            }
+          }
+          const completedIds = autoImportAfterPrepare ? [...autoImportIds] : [...consolidationSelected];
+          if (completedIds.length && !job.autoImport) {
+            const ids = completedIds.join(",");
+            const detailsResponse = await fetch(`/api/consolidation/files?ids=${encodeURIComponent(ids)}`, {cache:"no-store"});
+            const details = await detailsResponse.json();
+            const itemsById = new Map((details.items || []).map(item => [item.id, item]));
+            for (const item of details.items || []) if (item.prepared) consolidationMetadata.set(item.id, {title:item.proposal?.title || "", authors:(item.proposal?.authors || []).join("; ")});
+            if (autoImportAfterPrepare) {
+              const eligible = [];
+              let heldForReview = 0;
+              for (const id of autoImportIds) {
+                const item = itemsById.get(id);
+                const proposal = item?.proposal || {};
+                const confidence = Number(proposal.confidence);
+                const metadata = consolidationMetadata.get(id);
+                if (!item?.prepared || !Number.isFinite(confidence) || confidence < 0.5 || !metadata?.title.trim() || !metadata?.authors.trim()) {
+                  heldForReview++;
+                  continue;
+                }
+                eligible.push({id, title:metadata.title, authors:metadata.authors});
+              }
+              autoImportAfterPrepare = false;
+              autoImportIds = [];
+              if (!eligible.length) {
+                preparePolling = false;
+                document.getElementById("consolidationScan").disabled = false;
+                consolidationMessage.textContent = `LLM preparation complete. ${heldForReview} book(s) held for review; none met the 50% confidence threshold with complete metadata.`;
+                await loadConsolidationPage();
+                return;
+              }
+              consolidationMessage.textContent = `LLM preparation complete. ${heldForReview} book(s) held for review; automatically importing ${eligible.length} book(s) scoring at least 50%.`;
+              try {
+                const importResponse = await fetch("/api/consolidation/import", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({books:eligible})});
+                const importData = await importResponse.json();
+                if (!importResponse.ok) throw new Error(importData.message || "Could not start automatic import");
+                pollImportStatus();
+              } catch (error) {
+                preparePolling = false;
+                document.getElementById("consolidationScan").disabled = false;
+                consolidationMessage.textContent = `LLM preparation finished, but automatic import could not start: ${error.message}. The proposals remain available for review.`;
+                await loadConsolidationPage();
+              }
+              return;
+            }
+          }
+          preparePolling = false;
+          document.getElementById("consolidationScan").disabled = false;
+          await loadConsolidationPage();
+        }
+      }
+      consolidationImport.addEventListener("click", async () => {
+        const books = [...consolidationSelected].map(id => ({id, ...consolidationMetadata.get(id)}));
+        if (!books.length || books.length > 100) return;
+        if (!confirm(`Approve the displayed titles and authors, rename the files to Author - Title, then move verified books into Grimmory BookDrop? Each source file is removed only after its verified BookDrop file is in place.`)) return;
+        consolidationImport.disabled = true; consolidationMessage.textContent = "Writing metadata and moving verified books into Grimmory BookDrop…";
+        try {
+          const response = await fetch("/api/consolidation/import", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({books})});
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || "Import failed");
+          preparePolling = true; document.getElementById("consolidationScan").disabled = true; syncConsolidationActions();
+          pollImportStatus();
+        } catch (error) { consolidationMessage.textContent = error.message; }
+      });
+      async function pollImportStatus() {
+        try {
+          const response = await fetch("/api/consolidation/import-status", {cache:"no-store"});
+          const job = await response.json();
+          consolidationMessage.textContent = `${job.message}: ${job.processed} / ${job.total} · ${job.moved} moved · ${job.failed} failed`;
+          if (job.running) { setTimeout(pollImportStatus, 1000); return; }
+          preparePolling = false; document.getElementById("consolidationScan").disabled = false;
+          const result = job.result || {};
+          const retryIds = (result.failed || []).map(item => item.id).filter(Boolean);
+          if (!consolidationSelected.size) for (const id of retryIds) consolidationSelected.add(id);
+          if (retryIds.length) {
+            const detailsResponse = await fetch(`/api/consolidation/files?ids=${encodeURIComponent(retryIds.join(","))}`, {cache:"no-store"});
+            const details = await detailsResponse.json();
+            for (const item of details.items || []) if (item.prepared) consolidationMetadata.set(item.id, {title:item.proposal?.title || "", authors:(item.proposal?.authors || []).join("; ")});
+          }
+          for (const item of result.imported || []) { consolidationSelected.delete(item.id); consolidationMetadata.delete(item.id); }
+          consolidationMessage.textContent = `${(result.imported || []).length} moved into BookDrop; ${(result.failed || []).length} failed and remain in their source folders.`;
+          if (result.failed?.length) consolidationMessage.textContent += ` ${result.failed.map(item => `${item.name || item.id}: ${item.message}`).join(" · ")}`;
+          await loadConsolidationPage();
+        } catch (error) {
+          preparePolling = false; document.getElementById("consolidationScan").disabled = false;
+          consolidationMessage.textContent = `Could not read import status: ${error.message}`; syncConsolidationActions();
+        }
+      }
+      document.getElementById("deleteLegacySelectionButton").addEventListener("click", async () => {
+        pendingLegacyDeleteIds = [...consolidationSelected];
+        const ids = pendingLegacyDeleteIds.join(",");
+        const response = await fetch(`/api/consolidation/files?ids=${encodeURIComponent(ids)}`, {cache:"no-store"});
+        const rows = await response.json();
+        const byId = new Map((rows.items || []).map(item => [item.id, item]));
+        deleteLegacyList.innerHTML = pendingLegacyDeleteIds.map(id => `<li>${escapeHtml(byId.get(id)?.name || id)} <span class="muted">(${escapeHtml(byId.get(id)?.sourceLabel || "source")})</span></li>`).join("");
+        confirmLegacyDeleteInput.checked = false; confirmLegacyDeleteButton.disabled = true; deleteLegacyDialog.showModal();
+      });
+      confirmLegacyDeleteInput.addEventListener("change", () => { confirmLegacyDeleteButton.disabled = !confirmLegacyDeleteInput.checked; });
+      confirmLegacyDeleteButton.addEventListener("click", async event => {
+        event.preventDefault();
+        if (!confirmLegacyDeleteInput.checked || !pendingLegacyDeleteIds.length) return;
+        confirmLegacyDeleteButton.disabled = true; confirmLegacyDeleteButton.textContent = "Deleting…";
+        try {
+          const response = await fetch("/api/consolidation/files", {method:"DELETE", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ids:pendingLegacyDeleteIds})});
+          const result = await response.json();
+          if (!response.ok && response.status !== 207) throw new Error(result.message || "Delete failed");
+          for (const item of result.deleted || []) consolidationSelected.delete(item.id);
+          deleteLegacyDialog.close();
+          consolidationMessage.textContent = `${(result.deleted || []).length} source book file(s) deleted; ${(result.failed || []).length} failed.`;
+          await loadConsolidationPage();
+        } catch (error) { consolidationMessage.textContent = error.message; }
+        finally { confirmLegacyDeleteButton.textContent = "Delete selected files"; }
+      });
+      loadConsolidationPage().catch(() => {});
+      (async () => {
+        const prepResponse = await fetch("/api/consolidation/prepare-status", {cache:"no-store"});
+        const prep = await prepResponse.json();
+        if (prep.running) { preparePolling = true; document.getElementById("consolidationScan").disabled = true; syncConsolidationActions(); pollPrepareStatus(); return; }
+        const importResponse = await fetch("/api/consolidation/import-status", {cache:"no-store"});
+        const importing = await importResponse.json();
+        if (importing.running) { preparePolling = true; document.getElementById("consolidationScan").disabled = true; syncConsolidationActions(); pollImportStatus(); }
+      })().catch(() => {});
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
+      }
+
+      async function loadReviewQueue() {
+        try {
+          const response = await fetch("/api/grimmory/review-queue", {cache: "no-store"});
+          const data = await response.json();
+          const items = data.items || [];
+          reviewQueueItems = items;
+          reviewQueueSummary.textContent = `${items.length} book(s)`;
+          reviewQueueBody.innerHTML = items.map(item => {
+            const suggestion = item.proposed || {};
+            const suggestionText = [suggestion.title, (suggestion.authors || []).join("; "), suggestion.rationale].filter(Boolean).join(" · ");
+            const deletionFailed = item.deleteStatus?.startsWith("Removed from Grimmory");
+            const exceptionBadge = item.exception ? `<span class="badge warn">Ignored by future scans</span>` : "";
+            return `<tr class="review-row"><td><input class="review-select" type="checkbox" value="${escapeHtml(item.id)}" aria-label="Select ${escapeHtml(item.title || item.id)}" ${deletionFailed ? "disabled" : ""}></td><td>${escapeHtml(item.id)}</td><td>${escapeHtml(item.title || "Unknown title")}</td><td>${escapeHtml(item.reason || item.sampleNote || "Manual check required")}<div class="muted">${escapeHtml(item.sampleNote || "")}</div></td><td>${escapeHtml(suggestionText || "No reliable suggestion")}</td><td>${exceptionBadge}</td><td>${escapeHtml(item.deleteStatus || "")}</td></tr>`;
+          }).join("") || `<tr><td colspan="7" class="muted empty">No books need review.</td></tr>`;
+          syncReviewDeleteSelection();
+        } catch (_) {
+          reviewQueueSummary.textContent = "Unavailable";
+        }
+      }
+
+      function syncReviewDeleteSelection() {
+        const boxes = [...reviewQueueBody.querySelectorAll(".review-select:not(:disabled)")];
+        const selected = boxes.filter(box => box.checked);
+        const tooManySelected = selected.length > 25;
+        deleteReviewSelectionButton.disabled = selected.length === 0 || tooManySelected || Boolean(latestRun?.running);
+        deleteReviewSelectionButton.textContent = selected.length
+          ? (tooManySelected ? "Select at most 25 books" : `Delete ${selected.length} selected from library + disk`)
+          : "Delete selected from library + disk";
+        const selectedIds = new Set(selected.map(box => Number(box.value)));
+        const selectedItems = reviewQueueItems.filter(item => selectedIds.has(Number(item.id)));
+        const exceptionCount = selectedItems.filter(item => item.exception).length;
+        const actionBlocked = Boolean(latestRun?.running) || tooManySelected;
+        markReviewExceptionsButton.disabled = selected.length === 0 || actionBlocked || exceptionCount === selected.length;
+        clearReviewExceptionsButton.disabled = exceptionCount === 0 || actionBlocked;
+        reviewSelectAll.checked = boxes.length > 0 && selected.length === boxes.length;
+        reviewSelectAll.indeterminate = selected.length > 0 && selected.length < boxes.length;
+      }
+
+      function openReviewDeleteConfirmation() {
+        pendingDeleteIds = [...reviewQueueBody.querySelectorAll(".review-select:checked")].map(box => Number(box.value));
+        if (!pendingDeleteIds.length) return;
+        const byId = new Map(reviewQueueItems.map(item => [Number(item.id), item]));
+        deleteReviewList.innerHTML = pendingDeleteIds.map(id => {
+          const item = byId.get(id);
+          return `<li>${escapeHtml(item?.title || "Unknown title")} <span class="muted">(ID ${id})</span></li>`;
+        }).join("");
+        confirmReviewDeleteInput.checked = false;
+        confirmReviewDeleteButton.disabled = true;
+        deleteReviewDialog.showModal();
+      }
+
+      async function deleteSelectedReviewBooks() {
+        if (!pendingDeleteIds.length || !confirmReviewDeleteInput.checked) return;
+        confirmReviewDeleteButton.disabled = true;
+        confirmReviewDeleteButton.textContent = "Deleting…";
+        try {
+          const response = await fetch("/api/grimmory/review-queue", {
+            method: "DELETE",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ids: pendingDeleteIds}),
+          });
+          const result = await response.json();
+          if (!response.ok && response.status !== 207) throw new Error(result.message || "Delete failed.");
+          const failed = result.failedFileDeletions || [];
+          const notDeleted = result.notDeleted || [];
+          deleteReviewDialog.close();
+          alert(`${(result.deleted || []).length} removed from Grimmory. ${failed.length} file deletion failure(s); ${notDeleted.length} book(s) not removed. See the review queue for details.`);
+          await loadReviewQueue();
+        } catch (error) {
+          alert(error.message || "Delete failed.");
+        } finally {
+          confirmReviewDeleteButton.textContent = "Delete books";
+          syncReviewDeleteSelection();
+        }
+      }
+
+      async function setSelectedReviewExceptions(exception) {
+        const ids = [...reviewQueueBody.querySelectorAll(".review-select:checked")].map(box => Number(box.value));
+        if (!ids.length || ids.length > 25) return;
+        markReviewExceptionsButton.disabled = true;
+        clearReviewExceptionsButton.disabled = true;
+        try {
+          const response = await fetch("/api/grimmory/review-queue/exceptions", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ids, exception}),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.message || "Could not update exception settings.");
+          await loadReviewQueue();
+        } catch (error) {
+          alert(error.message || "Could not update exception settings.");
+          syncReviewDeleteSelection();
+        }
+      }
+
+      reviewQueueBody.addEventListener("change", event => {
+        if (event.target.matches(".review-select")) syncReviewDeleteSelection();
+      });
+      reviewQueueBody.addEventListener("click", event => {
+        if (event.target.closest("input, button, a, select, textarea, label")) return;
+        const row = event.target.closest("tr.review-row");
+        const checkbox = row?.querySelector(".review-select:not(:disabled)");
+        if (!checkbox) return;
+        checkbox.checked = !checkbox.checked;
+        syncReviewDeleteSelection();
+      });
+      reviewSelectAll.addEventListener("change", () => {
+        reviewQueueBody.querySelectorAll(".review-select:not(:disabled)").forEach(box => { box.checked = reviewSelectAll.checked; });
+        syncReviewDeleteSelection();
+      });
+      deleteReviewSelectionButton.addEventListener("click", openReviewDeleteConfirmation);
+      markReviewExceptionsButton.addEventListener("click", () => setSelectedReviewExceptions(true));
+      clearReviewExceptionsButton.addEventListener("click", () => setSelectedReviewExceptions(false));
+      confirmReviewDeleteInput.addEventListener("change", () => { confirmReviewDeleteButton.disabled = !confirmReviewDeleteInput.checked; });
+      document.getElementById("deleteReviewForm").addEventListener("submit", event => {
+        event.preventDefault();
+        deleteSelectedReviewBooks();
+      });
+      document.getElementById("cancelReviewDeleteButton").addEventListener("click", () => deleteReviewDialog.close());
+      const config = document.getElementById("config");
+      let pollTimer = null;
+      let latestRun = null;
+      let lastRenderedRunKey = null;
+
+      function badgeClass(status) {
+        if (status === "auto_fixable" || status === "updated") return "good";
+        if (status === "running" || status === "llm_deciding" || status === "updating") return "info";
+        if (status === "needs_llm" || status === "needs_review" || status === "would_update") return "warn";
+        if (status === "skipped") return "warn";
+        if (status === "scan") return "info";
+        return "bad";
+      }
+
+      function renderConfig(data) {
+        const cfg = data.grimmory_repair || data.config || {};
+        config.innerHTML = `
+          <code>Grimmory URL: ${cfg.grimmoryBaseUrl || ""}</code>
+          <code>Grimmory credentials: ${cfg.hasGrimmoryCredentials ? "configured" : "missing"}</code>
+          <code>Default low-score threshold: ${cfg.defaultLowScoreThreshold ?? ""}</code>
+          <code>LLM config: ${cfg.hasLlmConfig ? "configured" : "missing"}</code>
+          <code>LLM base URL: ${cfg.llmBaseUrl || ""}</code>
+          <code>LLM model: ${cfg.llmModel || ""}</code>
+        `;
+      }
+
+      function renderActiveRun(run) {
+        latestRun = run || null;
+        if (!run) {
+          activeRunSummary.textContent = "Idle";
+          activeRunMeta.innerHTML = `<code>No run state available.</code>`;
+          return;
+        }
+        const processed = Number(run.scanProcessed || 0);
+        const total = Number(run.scanTotal || 0);
+        const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+        const startedAt = run.startedAt ? new Date(run.startedAt) : null;
+        const endedAt = run.finishedAt ? new Date(run.finishedAt) : new Date();
+        const elapsedSeconds = startedAt ? Math.max(0, Math.floor((endedAt - startedAt) / 1000)) : 0;
+        const elapsed = elapsedSeconds >= 60
+          ? `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`
+          : `${elapsedSeconds}s`;
+        const remainingSeconds = processed > 0 && total > processed
+          ? Math.round((elapsedSeconds / processed) * (total - processed))
+          : 0;
+        const remaining = remainingSeconds >= 60
+          ? `${Math.floor(remainingSeconds / 60)}m ${remainingSeconds % 60}s`
+          : (remainingSeconds > 0 ? `${remainingSeconds}s` : "-");
+        activeRunSummary.textContent = run.running
+          ? `${run.mode || "repair"} running`
+          : (run.state === "failed" ? `${run.mode || "run"} failed` : (run.finishedAt ? `${run.mode || "repair"} finished` : "Idle"));
+        activeRunMeta.innerHTML = `
+          <div class="run-progress" aria-label="Run progress"><span style="width: ${percent}%"></span></div>
+          <div class="run-grid">
+            <code>Mode: ${run.mode || "none"}</code>
+            <code>Phase: ${run.phase || run.state || "idle"}</code>
+            <code>Elapsed: ${elapsed}</code>
+            <code>Progress: ${processed}/${total || "?"} (${percent}%)</code>
+            <code>Estimated remaining: ${remaining}</code>
+            <code>Candidates: ${run.candidateCount || 0}</code>
+            <code>Updates: ${run.processed || 0}/${run.selectedCount || 0}</code>
+            <code>Needs review: ${run.needsReviewCount || 0}</code>
+            <code>Exceptions ignored: ${run.lastResult?.counts?.ignoredExceptions || 0}</code>
+          </div>
+          <code class="run-message">${run.message || ""}</code>
+          <code>Current: ${run.currentBookId || "-"}${run.currentTitle ? ` · ${run.currentTitle}` : ""}</code>
+          ${run.lastResult?.metadataRefresh ? `<code>Grimmory refresh: ${run.lastResult.metadataRefresh.ok ? "scheduled" : "failed"}${run.lastResult.metadataRefresh.message ? ` · ${run.lastResult.metadataRefresh.message}` : ""}</code>` : ""}
+          ${run.state === "failed" ? `<code class="run-error">${run.lastResult?.errorType || "Error"}: ${run.lastResult?.message || "Unknown failure"}</code>` : ""}
+        `;
+        const runKey = `${run.mode}:${run.startedAt}:${run.finishedAt}:${run.state}`;
+        if (!run.running && run.mode === "scan" && run.state === "finished" && runKey !== lastRenderedRunKey) {
+          lastRenderedRunKey = runKey;
+          loadScanResult();
+        }
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = null;
+        }
+        if (run.running) {
+          pollTimer = setTimeout(loadStatus, 1500);
+        }
+      }
+
+      function renderGrimmoryRepair(data) {
+        if (!data || !data.ok) {
+          grimmoryRepairSummary.textContent = data?.message || "Scan failed";
+          grimmoryRepairBody.innerHTML = `<tr><td colspan="6" class="muted empty">${data?.message || "Scan failed."}</td></tr>`;
+          return;
+        }
+        const counts = data.counts || {};
+        const scanScope = counts.totalAvailable
+          ? `scanned ${counts.totalBooks || 0}/${counts.totalAvailable}${counts.limitReached ? ` (stopped at ${counts.candidateLimit} candidates)` : ""}`
+          : "";
+        grimmoryRepairSummary.textContent = `${counts.candidates || 0} candidates, ${counts.autoFixable || 0} auto-fixable, ${counts.ignoredExceptions || 0} exceptions ignored, ${counts.lowScoreMissingAuthors || 0} low-score books missing authors${scanScope ? ` · ${scanScope}` : ""}`;
+        const liveStates = (latestRun && latestRun.itemStates) || {};
+        grimmoryRepairBody.innerHTML = (data.candidates || []).map(item => {
+          const suggestion = item.suggestion;
+          const status = item.canAutoFix ? "auto_fixable" : "needs_llm";
+          const live = liveStates[String(item.id)]?.state || "";
+          const current = `${item.authors?.join("; ") || "none"} · ${item.title || ""}`;
+          const proposed = suggestion
+            ? `${suggestion.authors?.join("; ") || "none"} · ${suggestion.title || ""}${suggestion.subtitle ? ` / ${suggestion.subtitle}` : ""}${suggestion.seriesName ? ` / [${suggestion.seriesName}${suggestion.seriesNumber ? ` ${suggestion.seriesNumber}` : ""}]` : ""}`
+            : "No suggestion";
+          return `
+            <tr>
+              <td>${item.id}</td>
+              <td>${item.score ?? ""}</td>
+              <td>${live ? `<span class="badge ${badgeClass(live)}">${live}</span>` : ""}</td>
+              <td><span class="badge ${badgeClass(status)}">${status}</span></td>
+              <td>${current}<div class="muted">${(item.reasons || []).join(", ")}</div></td>
+              <td>${proposed}<div class="muted">${suggestion?.rationale || ""}</div></td>
+            </tr>
+          `;
+        }).join("") || `<tr><td colspan="6" class="muted empty">No repair candidates found.</td></tr>`;
+      }
+
+      function repairPayload(extra = {}) {
+        const threshold = Number.parseFloat(repairThresholdInput.value);
+        const maxUpdates = Number.parseInt(repairLimitInput.value, 10);
+        const minConfidence = Number.parseFloat(repairLlmConfidenceInput.value);
+        return {
+          threshold: Number.isFinite(threshold) ? threshold : 30,
+          maxUpdates: Number.isFinite(maxUpdates) && maxUpdates > 0 ? maxUpdates : undefined,
+          minConfidence: Number.isFinite(minConfidence) ? minConfidence : 0.9,
+          refreshAfterUpdate: Boolean(repairRefreshAfterUpdateInput.checked),
+          ...extra,
+        };
+      }
+
+      async function loadStatus() {
+        try {
+          const response = await fetch("/api/status", { cache: "no-store" });
+          const data = await response.json();
+          renderConfig(data);
+          renderActiveRun(data.active_run || null);
+          if (data.active_run?.running) loadReviewQueue();
+        } catch (error) {
+          activeRunSummary.textContent = "Status unavailable";
+          activeRunMeta.innerHTML = `<code class="run-error">${error.message}</code>`;
+          pollTimer = setTimeout(loadStatus, 3000);
+        }
+      }
+
+      async function loadScanResult() {
+        const response = await fetch("/api/grimmory/scan-result", { cache: "no-store" });
+        if (response.status === 404) return;
+        const data = await response.json();
+        renderGrimmoryRepair(data);
+      }
+
+      async function runRepairScan() {
+        repairScanButton.disabled = true;
+        grimmoryRepairSummary.textContent = "Scan starting";
+        const response = await fetch("/api/grimmory/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(repairPayload()),
+        });
+        const data = await response.json();
+        repairScanButton.disabled = false;
+        if (!response.ok) {
+          alert(data.message || "Grimmory scan failed.");
+          return;
+        }
+        await loadStatus();
+      }
+
+      async function runHeuristicRepair(dryRun) {
+        const response = await fetch("/api/grimmory/fix-heuristic", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(repairPayload({ dryRun })),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          alert(data.message || "Heuristic repair failed.");
+          return;
+        }
+        alert(dryRun
+          ? `Heuristic dry run prepared ${data.plannedCount || 0} update(s).`
+          : (data.background ? "Heuristic repair started." : `Applied ${data.updatedCount || 0} heuristic update(s).`));
+        await loadStatus();
+        if (dryRun || !data.background) await runRepairScan();
+      }
+
+      async function runLlmRepair(dryRun) {
+        const response = await fetch("/api/grimmory/fix-llm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(repairPayload({ dryRun })),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          alert(data.message || "LLM repair failed.");
+          return;
+        }
+        alert(dryRun
+          ? `LLM dry run evaluated ${data.selectedCount || 0} candidate(s).`
+          : (data.background ? "LLM repair started." : `Applied ${data.updatedCount || 0} LLM update(s).`));
+        await loadStatus();
+        if (dryRun || !data.background) await runRepairScan();
+      }
+
+      repairScanButton.addEventListener("click", runRepairScan);
+      repairHeuristicDryRunButton.addEventListener("click", () => runHeuristicRepair(true));
+      repairHeuristicApplyButton.addEventListener("click", () => runHeuristicRepair(false));
+      repairLlmDryRunButton.addEventListener("click", () => runLlmRepair(true));
+      repairLlmApplyButton.addEventListener("click", () => runLlmRepair(false));
+
+      loadStatus();
+      loadScanResult();
+      loadReviewQueue();
+    </script>
+  </body>
+</html>

@@ -39,17 +39,6 @@
   } @else {
 
     <div class="controls-section">
-      @if (saving) {
-        <div class="saving-overlay">
-          <p-progressSpinner strokeWidth="4"/>
-          <div class="saving-message">
-          <span>
-            {{ t('savingMessage') }}
-          </span>
-          </div>
-        </div>
-      }
-
       @if (bookdropFileUis.length !== 0) {
         <div class="controls-row">
           <div class="action-buttons">
@@ -357,4 +346,34 @@
     </div>
   }
 </div>
+
+@if (saving) {
+  <div class="finalize-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="finalize-progress-title">
+    <section class="finalize-modal">
+      <div class="finalize-modal-icon"><i [class]="processingAction === 'delete' ? 'pi pi-trash' : 'pi pi-book'"></i></div>
+      <h2 id="finalize-progress-title">{{ t(processingAction === 'delete' ? 'deleteProgress.title' : 'finalizeProgress.title') }}</h2>
+      <p class="finalize-phase">{{ finalizeProgress?.phase || t(processingAction === 'delete' ? 'deleteProgress.starting' : 'finalizeProgress.starting') }}</p>
+      <div class="finalize-progress-track" role="progressbar"
+           [attr.aria-valuenow]="finalizeProgress?.processed || 0"
+           [attr.aria-valuemax]="finalizeProgress?.total || 1">
+        <span [style.width.%]="finalizeProgress?.total ? (finalizeProgress!.processed / finalizeProgress!.total * 100) : 4"></span>
+      </div>
+      <div class="finalize-progress-counts">
+        <strong>{{ finalizeProgress?.processed || 0 }} <span>{{ t('finalizeProgress.of') }}</span> {{ finalizeProgress?.total || 0 }}</strong>
+        <span>{{ t(processingAction === 'delete' ? 'deleteProgress.booksProcessed' : 'finalizeProgress.booksProcessed') }}</span>
+      </div>
+      @if (finalizeProgress?.currentFile) {
+        <div class="finalize-current-file"><i class="pi pi-file"></i><span>{{ finalizeProgress?.currentFile }}</span></div>
+      }
+      <div class="finalize-stats">
+        <span class="success"><i class="pi pi-check-circle"></i> {{ finalizeProgress?.succeeded || 0 }} {{ t(processingAction === 'delete' ? 'deleteProgress.succeeded' : 'finalizeProgress.succeeded') }}</span>
+        <span class="failed"><i class="pi pi-exclamation-circle"></i> {{ finalizeProgress?.failed || 0 }} {{ t(processingAction === 'delete' ? 'deleteProgress.failed' : 'finalizeProgress.failed') }}</span>
+      </div>
+      @if (progressPollingError) {
+        <p class="finalize-progress-warning" role="status">{{ t('finalizeProgress.connectionDelayed') }}</p>
+      }
+      <div class="finalize-modal-foot"><p-progressSpinner strokeWidth="4"/><span>{{ t(processingAction === 'delete' ? 'deleteProgress.keepOpen' : 'finalizeProgress.keepOpen') }}</span></div>
+    </section>
+  </div>
+}
 </ng-container>

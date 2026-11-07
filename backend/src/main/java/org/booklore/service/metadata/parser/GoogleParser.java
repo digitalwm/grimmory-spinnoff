@@ -8,6 +8,7 @@ import org.booklore.model.dto.response.GoogleBooksApiResponse;
 import org.booklore.model.dto.settings.MetadataProviderSettings;
 import org.booklore.model.enums.MetadataProvider;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.service.metadata.MetadataIdentityMatcher;
 import org.booklore.util.BookUtils;
 import org.booklore.util.LanguageNormalizer;
 import org.jsoup.Jsoup;
@@ -70,7 +71,9 @@ public class GoogleParser implements BookParser {
     @Override
     public BookMetadata fetchTopMetadata(Book book, FetchMetadataRequest fetchMetadataRequest) {
         List<BookMetadata> fetchedBookMetadata = fetchMetadata(book, fetchMetadataRequest);
-        return fetchedBookMetadata.isEmpty() ? null : fetchedBookMetadata.getFirst();
+        return fetchedBookMetadata.stream()
+                .filter(candidate -> MetadataIdentityMatcher.matches(book.getMetadata(), candidate))
+                .findFirst().orElse(null);
     }
 
     @Override

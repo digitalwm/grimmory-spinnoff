@@ -1062,6 +1062,7 @@ public class AppBookService {
             case "seriesname", "series" -> "metadata.seriesName";
             case "seriesnumber" -> "metadata.seriesNumber";
             case "pagecount" -> "metadata.pageCount";
+            case "metadatamatchscore", "matchscore" -> "metadataMatchScore";
             case "language" -> "metadata.language";
             case "publisher" -> "metadata.publisher";
             case "publisheddate" -> "metadata.publishedDate";
@@ -1088,7 +1089,12 @@ public class AppBookService {
 
         String field = getSortField(sortBy);
 
-        return Sort.by(direction, field);
+        Sort.Order order = new Sort.Order(direction, field);
+        if ("metadataMatchScore".equals(field)) {
+            order = order.nullsLast();
+            return Sort.by(order).and(Sort.by(Sort.Direction.ASC, "id"));
+        }
+        return Sort.by(order);
     }
 
     private int validatePageNumber(Integer page) {

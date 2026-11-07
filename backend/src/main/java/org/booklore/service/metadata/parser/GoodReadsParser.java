@@ -12,6 +12,7 @@ import org.booklore.model.dto.BookReview;
 import org.booklore.model.dto.request.FetchMetadataRequest;
 import org.booklore.model.enums.MetadataProvider;
 import org.booklore.service.appsettings.AppSettingService;
+import org.booklore.service.metadata.MetadataIdentityMatcher;
 import org.booklore.util.BookUtils;
 import org.booklore.util.LanguageNormalizer;
 import lombok.AllArgsConstructor;
@@ -127,7 +128,7 @@ public class GoodReadsParser implements BookParser, DetailedMetadataProvider {
             log.info("GoodReads: Using existing Goodreads ID: {}", existingGoodreadsId);
             try {
                 BookMetadata metadata = fetchAndParseBook(existingGoodreadsId);
-                if (metadata != null) {
+                if (MetadataIdentityMatcher.matches(book.getMetadata(), metadata)) {
                     return metadata;
                 }
                 log.warn("GoodReads: Failed to parse details for existing ID: {}, falling back to search", existingGoodreadsId);
@@ -136,7 +137,8 @@ public class GoodReadsParser implements BookParser, DetailedMetadataProvider {
             }
         }
 
-        return fetchMetadataStream(book, fetchMetadataRequest).blockFirst();
+        return fetchMetadataStream(book, fetchMetadataRequest)
+                .filter(candidate -> MetadataIdentityMatcher.matches(book.getMetadata(), candidate)).blockFirst();
     }
 
     private String getExistingGoodreadsId(Book book) {

@@ -137,6 +137,12 @@ public class MetadataRefreshService {
 
                         reportProgressIfNeeded(task, jobId, finalCompletedCount, totalBooks, book, isReviewMode);
                         Map<MetadataProvider, BookMetadata> metadataMap = fetchMetadataForBook(providers, book);
+                        if (metadataMap.isEmpty()) {
+                            log.info("Keeping existing metadata for book {}: no compatible provider candidate", book.getId());
+                            sendBatchProgressNotification(jobId, finalCompletedCount + 1, totalBooks,
+                                    "No compatible metadata: " + book.getMetadata().getTitle(), MetadataFetchTaskStatus.IN_PROGRESS, isReviewMode);
+                            return null;
+                        }
                         if (providers.contains(GoodReads)) {
                             try {
                                 Thread.sleep(ThreadLocalRandom.current().nextLong(500, 1500));
@@ -400,7 +406,14 @@ public class MetadataRefreshService {
             return null;
         }
 
-        return parser.fetchTopMetadata(book, buildFetchMetadataRequestFromBook(book));
+        BookMetadata candidate = parser.fetchTopMetadata(book, buildFetchMetadataRequestFromBook(book));
+        if (candidate != null && !MetadataIdentityMatcher.matches(book.getMetadata(), candidate)) {
+            log.warn("Rejected automatic {} metadata identity mismatch: original title='{}', authors={}; candidate title='{}', authors={}",
+                    provider, book.getMetadata() == null ? null : book.getMetadata().getTitle(),
+                    book.getMetadata() == null ? null : book.getMetadata().getAuthors(), candidate.getTitle(), candidate.getAuthors());
+            return null;
+        }
+        return candidate;
     }
 
     private BookParser getParser(MetadataProvider provider) {

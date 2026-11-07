@@ -32,6 +32,7 @@ import org.booklore.service.file.FileMovingHelper;
 import org.booklore.service.fileprocessor.BookFileProcessor;
 import org.booklore.service.fileprocessor.BookFileProcessorRegistry;
 import org.booklore.service.metadata.MetadataRefreshService;
+import org.booklore.service.metadata.MetadataIdentityMatcher;
 import org.booklore.service.monitoring.MonitoringRegistrationService;
 import org.booklore.util.FileUtils;
 import org.springframework.context.ApplicationEventPublisher;
@@ -43,6 +44,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.File;
@@ -54,6 +60,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -76,8 +83,12 @@ public class BookDropService {
     private final BookdropFileMapper mapper;
     private final ObjectMapper objectMapper;
     private final FileMovingHelper fileMovingHelper;
-    private final MonitoringRegistrationService monitoringRegistrationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final MonitoringRegistrationService monitoringRegistrationService;
+    private final BookdropFinalizeProgressService finalizeProgressService;
+    private final PlatformTransactionManager transactionManager;
+    private final ThreadLocal<String> activeProgressId = new ThreadLocal<>();
+    private final AtomicBoolean operationInProgress = new AtomicBoolean();
 
     private static final int CHUNK_SIZE = 100;
 
@@ -114,44 +125,73 @@ public class BookDropService {
         }
     }
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public BookdropFinalizeResult finalizeImport(BookdropFinalizeRequest request) {
+        beginOperation();
         try {
+            activeProgressId.set(request.getProgressId());
+            finalizeProgressService.update(request.getProgressId(), "Preparing import", 0, 0, 0, 0, null, false);
             bookdropMonitoringService.pauseMonitoring();
             return processFinalizationRequest(request);
         } finally {
-            bookdropMonitoringService.resumeMonitoring();
-            log.info("Bookdrop monitoring resumed");
+            endOperation();
         }
     }
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void discardSelectedFiles(boolean selectAll, List<Long> excludedIds, List<Long> selectedIds) {
-        bookdropMonitoringService.pauseMonitoring();
-        Path bookdropPath = Path.of(appProperties.getBookdropFolder());
+        discardSelectedFiles(selectAll, excludedIds, selectedIds, null);
+    }
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void discardSelectedFiles(boolean selectAll, List<Long> excludedIds, List<Long> selectedIds, String progressId) {
+        beginOperation();
         AtomicInteger deletedFiles = new AtomicInteger();
         AtomicInteger deletedDirs = new AtomicInteger();
         AtomicInteger deletedCovers = new AtomicInteger();
 
         try {
+            activeProgressId.set(progressId);
+            bookdropMonitoringService.pauseMonitoring();
+            Path bookdropPath = Path.of(appProperties.getBookdropFolder());
             if (!Files.exists(bookdropPath)) {
                 log.info("Bookdrop folder does not exist: {}", bookdropPath);
+                finalizeProgressService.update(progressId, "Complete", 0, 0, 0, 0, null, true);
                 return;
             }
 
             List<BookdropFileEntity> filesToDelete = getFilesToDelete(selectAll, excludedIds, selectedIds);
-            deleteFilesAndCovers(filesToDelete, deletedFiles, deletedCovers);
+            finalizeProgressService.update(progressId, "Deleting selected Bookdrop files", 0, filesToDelete.size(), 0, 0, null, false);
+            deleteFilesAndCovers(filesToDelete, deletedFiles, deletedCovers, progressId);
+            finalizeProgressService.update(progressId, "Cleaning up empty folders", filesToDelete.size(), filesToDelete.size(), filesToDelete.size(), 0, null, false);
             deleteEmptyDirectories(bookdropPath, deletedDirs);
 
             bookdropFileRepository.deleteAllById(filesToDelete.stream().map(BookdropFileEntity::getId).toList());
             log.info("Deleted {} bookdrop DB entries", filesToDelete.size());
+            finalizeProgressService.update(progressId, "Complete", filesToDelete.size(), filesToDelete.size(), filesToDelete.size(), 0, null, true);
 
             bookdropNotificationService.sendBookdropFileSummaryNotification();
             log.info("Bookdrop cleanup summary: deleted {} files, {} folders, {} DB entries, {} covers",
                     deletedFiles.get(), deletedDirs.get(), filesToDelete.size(), deletedCovers.get());
 
         } finally {
+            endOperation();
+        }
+    }
+
+    private void beginOperation() {
+        if (!operationInProgress.compareAndSet(false, true)) {
+            throw ApiError.CONFLICT.createException("A BookDrop import or deletion is already running. Wait for it to finish before starting another operation.");
+        }
+    }
+
+    private void endOperation() {
+        try {
             bookdropMonitoringService.resumeMonitoring();
-            log.info("Bookdrop monitoring resumed after cleanup (library monitoring unaffected)");
+        } finally {
+            activeProgressId.remove();
+            operationInProgress.set(false);
+            log.info("Bookdrop monitoring resumed");
         }
     }
 
@@ -179,6 +219,7 @@ public class BookDropService {
         }
 
         updateFinalResults(results, totalFilesProcessed, failedCount);
+        finalizeProgressService.update(request.getProgressId(), "Complete", totalFilesProcessed.get(), totalFilesProcessed.get(), results.getSuccessfullyImported(), results.getFailed(), null, true);
         return results;
     }
 
@@ -233,12 +274,15 @@ public class BookDropService {
                                    AtomicInteger failedCount,
                                    AtomicInteger totalFilesProcessed) {
 
-        // Collect all libraries that will be affected by moves
+        int total = ids.size();
+        int completed = 0;
+        int succeeded = 0;
+        int failed = 0;
+        TransactionTemplate fileTransaction = new TransactionTemplate(transactionManager);
+        fileTransaction.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
         Set<Long> affectedLibraries = collectAffectedLibraries(ids, metadataById, defaultLibraryId, defaultPathId);
-
-        // Unregister monitoring for all affected libraries
-        unregisterAffectedLibraries(affectedLibraries);
-
+        affectedLibraries.forEach(monitoringRegistrationService::suppressLibraryEvents);
+        finalizeProgressService.update(activeProgressId.get(), "Moving books into their libraries", 0, total, 0, 0, null, false);
         try {
             for (int i = 0; i < ids.size(); i += CHUNK_SIZE) {
                 int end = Math.min(i + CHUNK_SIZE, ids.size());
@@ -252,67 +296,48 @@ public class BookDropService {
                 for (Long id : chunk) {
                     BookdropFileEntity file = fileMap.get(id);
                     if (file == null) {
-                        log.warn("File ID {} missing in DB during finalizeImport chunk processing", id);
-                        results.getResults().add(failureResult(id, "Unknown file", "File was not found in the Bookdrop review list"));
-                        failedCount.incrementAndGet();
-                        totalFilesProcessed.incrementAndGet();
+                    log.warn("File ID {} missing in DB during finalizeImport chunk processing", id);
+                    results.getResults().add(failureResult(id, "Unknown file", "File was not found in the Bookdrop review list"));
+                    failedCount.incrementAndGet();
+                    totalFilesProcessed.incrementAndGet();
+                    completed++;
+                    failed++;
+                    finalizeProgressService.update(activeProgressId.get(), "Moving books into their libraries", completed, total, succeeded, failed, "Bookdrop entry " + id, false);
                         continue;
                     }
-                    processFile(file, metadataById.get(id), defaultLibraryId, defaultPathId, results, failedCount);
+                    finalizeProgressService.update(activeProgressId.get(), "Moving books into their libraries", completed, total, succeeded, failed, file.getFileName(), false);
+                    int failuresBefore = failedCount.get();
+                    int resultCountBefore = results.getResults().size();
+                    try {
+                        fileTransaction.executeWithoutResult(status -> {
+                            processFile(file, metadataById.get(id), defaultLibraryId, defaultPathId, results, failedCount);
+                            if (failedCount.get() > failuresBefore) status.setRollbackOnly();
+                        });
+                    } catch (Exception e) {
+                        while (results.getResults().size() > resultCountBefore) {
+                            results.getResults().remove(results.getResults().size() - 1);
+                        }
+                        if (failedCount.get() == failuresBefore) failedCount.incrementAndGet();
+                        results.getResults().add(failureResult(id, file.getFileName(), "Import transaction failed: " + e.getMessage()));
+                    }
                     totalFilesProcessed.incrementAndGet();
+                    completed++;
+                    if (failedCount.get() == failuresBefore) succeeded++; else failed++;
+                    finalizeProgressService.update(activeProgressId.get(), "Moving books into their libraries", completed, total, succeeded, failed, file.getFileName(), false);
                 }
             }
         } finally {
-            // Re-register monitoring for all affected libraries
-            reregisterAffectedLibraries(affectedLibraries);
-        }
-    }
-
-    private Set<Long> collectAffectedLibraries(List<Long> ids,
-                                               Map<Long, BookdropFinalizeRequest.BookdropFinalizeFile> metadataById,
-                                               Long defaultLibraryId,
-                                               Long defaultPathId) {
-        Set<Long> affectedLibraries = new HashSet<>();
-
-        List<BookdropFileEntity> files = bookdropFileRepository.findAllById(ids);
-
-        for (BookdropFileEntity fileEntity : files) {
-            try {
-                FileProcessingContext context = prepareFileProcessingContext(fileEntity, metadataById.get(fileEntity.getId()), defaultLibraryId, defaultPathId);
-                affectedLibraries.add(context.libraryId());
-            } catch (Exception e) {
-                log.warn("Failed to determine library for file {}: {}", fileEntity.getId(), e.getMessage());
-            }
-        }
-
-        log.info("Collected {} unique libraries for monitoring unregistration: {}", affectedLibraries.size(), affectedLibraries);
-        return affectedLibraries;
-    }
-
-    private void unregisterAffectedLibraries(Set<Long> libraryIds) {
-        for (Long libraryId : libraryIds) {
-            monitoringRegistrationService.unregisterLibrary(libraryId);
-            log.debug("Unregistered library {} from monitoring", libraryId);
-        }
-        log.info("Unregistered {} libraries from monitoring", libraryIds.size());
-    }
-
-    private void reregisterAffectedLibraries(Set<Long> libraryIds) {
-        for (Long libraryId : libraryIds) {
-            try {
-                LibraryEntity library = libraryRepository.findByIdWithPaths(libraryId).orElse(null);
-                if (library != null) {
-                    for (LibraryPathEntity libPath : library.getLibraryPaths()) {
-                        Path libraryRoot = Path.of(libPath.getPath());
-                        monitoringRegistrationService.registerLibraryPaths(libraryId, libraryRoot);
-                        log.debug("Re-registered library {} path {} for monitoring", libraryId, libraryRoot);
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        affectedLibraries.forEach(monitoringRegistrationService::resumeLibraryEvents);
                     }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to re-register library {} for monitoring: {}", libraryId, e.getMessage());
+                });
+            } else {
+                affectedLibraries.forEach(monitoringRegistrationService::resumeLibraryEvents);
             }
         }
-        log.info("Re-registered {} libraries for monitoring", libraryIds.size());
     }
 
     private void updateFinalResults(BookdropFinalizeResult results, AtomicInteger totalFilesProcessed, AtomicInteger failedCount) {
@@ -372,9 +397,14 @@ public class BookDropService {
                 throw ApiError.GENERIC_BAD_REQUEST.createException("Missing metadata and defaults for fileId=" + fileEntity.getId());
             }
 
+            BookMetadata original = objectMapper.readValue(fileEntity.getOriginalMetadata(), BookMetadata.class);
             metadata = fileEntity.getFetchedMetadata() != null
                     ? objectMapper.readValue(fileEntity.getFetchedMetadata(), BookMetadata.class)
-                    : objectMapper.readValue(fileEntity.getOriginalMetadata(), BookMetadata.class);
+                    : original;
+            if (fileEntity.getFetchedMetadata() != null && !MetadataIdentityMatcher.matches(original, metadata)) {
+                log.warn("Ignoring previously fetched mismatched metadata during BookDrop import for file id={}; using embedded metadata", fileEntity.getId());
+                metadata = original;
+            }
 
             libraryId = defaultLibraryId;
             pathId = defaultPathId;
@@ -410,6 +440,16 @@ public class BookDropService {
         log.debug("Preparing to move file id={}, name={}, source={}, target={}, library={}, path={}", bookdropFile.getId(), bookdropFile.getFileName(), source, target, library.getName(), path.getPath());
 
         if (!Files.exists(source)) {
+            if (Files.isRegularFile(target)) {
+                log.warn("Bookdrop source is missing but the moved target exists; recovering import for id={} at {}", bookdropFile.getId(), target);
+                try {
+                    BookdropFileResult recovered = processMovedFile(bookdropFile, targetFile, library, path, metadata);
+                    if (recovered.isSuccess()) return recovered;
+                } catch (Exception e) {
+                    log.error("Failed to recover previously moved Bookdrop file id={} from {}", bookdropFile.getId(), target, e);
+                }
+                return failureResult(bookdropFile.getId(), targetFile.getName(), "The file was already moved, but Grimmory could not finish registering it. The original entry has been kept for retry.");
+            }
             bookdropFileRepository.deleteById(bookdropFile.getId());
             log.warn("Source file [id={}] not found at '{}'. Deleting entry from DB.", bookdropFile.getId(), source);
             bookdropNotificationService.sendBookdropFileSummaryNotification();
@@ -452,6 +492,9 @@ public class BookDropService {
                     log.info("Successfully deleted source file '{}' after successful import for file id={}", source, bookdropFile.getId());
                 } catch (IOException e) {
                     log.warn("Failed to delete source file '{}' after successful import for file id={}: {}", source, bookdropFile.getId(), e.getMessage());
+                    cleanupTargetFile(target, bookdropFile.getId(), "BookDrop source could not be removed");
+                    return failureResult(bookdropFile.getId(), bookdropFile.getFileName(),
+                            "Import rolled back because the source file could not be removed from BookDrop: " + e.getMessage());
                 }
             } else {
                 cleanupTargetFile(target, bookdropFile.getId(), "logical failure");
@@ -581,8 +624,10 @@ public class BookDropService {
         }
     }
 
-    private void deleteFilesAndCovers(List<BookdropFileEntity> filesToDelete, AtomicInteger deletedFiles, AtomicInteger deletedCovers) {
+    private void deleteFilesAndCovers(List<BookdropFileEntity> filesToDelete, AtomicInteger deletedFiles, AtomicInteger deletedCovers, String progressId) {
+        int processed = 0;
         for (BookdropFileEntity entity : filesToDelete) {
+            finalizeProgressService.update(progressId, "Deleting selected Bookdrop files", processed, filesToDelete.size(), processed, 0, entity.getFileName(), false);
             Path filePath = Path.of(entity.getFilePath());
             if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
                 try {
@@ -603,7 +648,24 @@ public class BookDropService {
                     log.warn("Failed to delete cover image for bookdropId={}: {}", entity.getId(), e.getMessage());
                 }
             }
+            processed++;
+            finalizeProgressService.update(progressId, "Deleting selected Bookdrop files", processed, filesToDelete.size(), processed, 0, entity.getFileName(), false);
         }
+    }
+
+    private Set<Long> collectAffectedLibraries(List<Long> ids,
+                                               Map<Long, BookdropFinalizeRequest.BookdropFinalizeFile> metadataById,
+                                               Long defaultLibraryId,
+                                               Long defaultPathId) {
+        Set<Long> affected = new HashSet<>();
+        for (BookdropFileEntity file : bookdropFileRepository.findAllById(ids)) {
+            try {
+                affected.add(prepareFileProcessingContext(file, metadataById.get(file.getId()), defaultLibraryId, defaultPathId).libraryId());
+            } catch (Exception e) {
+                log.warn("Failed to determine library for Bookdrop file {}: {}", file.getId(), e.getMessage());
+            }
+        }
+        return affected;
     }
 
     private void deleteEmptyDirectories(Path bookdropPath, AtomicInteger deletedDirs) {

@@ -41,6 +41,24 @@ import org.junit.jupiter.api.Assertions;
 @ExtendWith(MockitoExtension.class)
 class BookdropMetadataServiceTest {
 
+    @Test
+    void noAcceptedCandidatesClearsStaleFetchedDataAndPreservesOriginal() throws Exception {
+        sampleFile.setOriginalMetadata("{\"title\":\"Fate on Fire\"}");
+        sampleFile.setFetchedMetadata("{\"title\":\"Feudlings\"}");
+        when(bookdropFileRepository.findById(1L)).thenReturn(Optional.of(sampleFile));
+        when(appSettingService.getAppSettings()).thenReturn(new AppSettings());
+        when(objectMapper.readValue(anyString(), eq(BookMetadata.class))).thenReturn(BookMetadata.builder()
+                .title("Fate on Fire").authors(List.of("E. L. Todd")).build());
+        when(metadataRefreshService.prepareProviders(any())).thenReturn(List.of());
+        when(metadataRefreshService.fetchMetadataForBook(any(), any(Book.class))).thenReturn(Map.of());
+        when(bookdropFileRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        bookdropMetadataService.attachFetchedMetadata(1L);
+        assertThat(sampleFile.getFetchedMetadata()).isNull();
+        assertThat(sampleFile.getOriginalMetadata()).contains("Fate on Fire");
+        assertThat(sampleFile.getStatus()).isEqualTo(PENDING_REVIEW);
+        verify(metadataRefreshService, never()).buildFetchMetadata(any(), any(), any(), any());
+    }
+
     @Mock
     private BookdropFileRepository bookdropFileRepository;
     @Mock
@@ -108,7 +126,7 @@ class BookdropMetadataServiceTest {
         when(appSettingService.getAppSettings()).thenReturn(settings);
         when(metadataRefreshService.prepareProviders(any())).thenReturn(List.of());
         when(objectMapper.readValue(sampleFile.getOriginalMetadata(), BookMetadata.class)).thenReturn(fetched);
-        when(metadataRefreshService.fetchMetadataForBook(any(), any(Book.class))).thenReturn(Map.of());
+        when(metadataRefreshService.fetchMetadataForBook(any(), any(Book.class))).thenReturn(Map.of(MetadataProvider.Google, fetched));
         when(metadataRefreshService.buildFetchMetadata(any(), any(), any(), any())).thenReturn(fetched);
         when(objectMapper.writeValueAsString(fetched)).thenReturn("{\"title\":\"New Title\"}");
 
@@ -198,7 +216,7 @@ class BookdropMetadataServiceTest {
         when(appSettingService.getAppSettings()).thenReturn(settings);
         when(metadataRefreshService.prepareProviders(any())).thenReturn(List.of(MetadataProvider.GoodReads));
         when(objectMapper.readValue(anyString(), eq(BookMetadata.class))).thenReturn(fetched);
-        when(metadataRefreshService.fetchMetadataForBook(any(), any(Book.class))).thenReturn(Map.of());
+        when(metadataRefreshService.fetchMetadataForBook(any(), any(Book.class))).thenReturn(Map.of(MetadataProvider.Google, fetched));
         when(metadataRefreshService.buildFetchMetadata(any(), any(), any(), any())).thenReturn(fetched);
         when(objectMapper.writeValueAsString(fetched)).thenReturn("{\"title\":\"Fetched Book\"}");
         when(bookdropFileRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
