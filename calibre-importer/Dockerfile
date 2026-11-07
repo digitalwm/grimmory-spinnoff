@@ -1,4 +1,5 @@
-FROM lscr.io/linuxserver/calibre:latest
+ARG CALIBRE_BASE_IMAGE=lscr.io/linuxserver/calibre:latest
+FROM ${CALIBRE_BASE_IMAGE}
 
 WORKDIR /app
 

@@ -206,7 +206,7 @@
         consolidationPrepareImport.disabled = count === 0 || count > 500 || preparePolling;
         const importable = [...consolidationSelected].every(id => {
           const data = consolidationMetadata.get(id);
-          return data && data.title.trim() && data.authors.trim();
+          return data && data.sourceAvailable !== false && data.sourceHash && data.title.trim() && data.authors.trim();
         });
         consolidationImport.disabled = count === 0 || count > 100 || !importable || preparePolling;
         document.getElementById("deleteLegacySelectionButton").disabled = count === 0 || count > 100 || preparePolling;
@@ -237,16 +237,21 @@
             consolidationMetadata.set(item.id, {title: proposal?.title || "", authors: (proposal?.authors || []).join("; ")});
           }
           const edits = consolidationMetadata.get(item.id);
-          const currentText = [current.title, current.authors].filter(Boolean).join(" · ") || "No embedded metadata";
+          if (edits) {
+            edits.sourceAvailable = item.sourceAvailable;
+            edits.sourceHash = proposal?.sourceHash;
+          }
+          const identityText = [current.title, current.authors].filter(Boolean).join(" · ");
+          const currentText = item.sourceAvailable === false ? `Source unavailable at scanned path${identityText ? " · " + identityText : ""}` : identityText || "No embedded metadata";
           const proposalCell = item.prepared
             ? `<label class="metadata-edit"><span>Title</span><input class="metadata-title" data-id="${escapeHtml(item.id)}" value="${escapeHtml(edits?.title || "")}" aria-label="Approved title for ${escapeHtml(item.name)}"></label><label class="metadata-edit"><span>Author(s)</span><input class="metadata-authors" data-id="${escapeHtml(item.id)}" value="${escapeHtml(edits?.authors || "")}" aria-label="Approved authors for ${escapeHtml(item.name)}"></label>`
             : `<span class="muted">Select and prepare with LLM</span>`;
           const confidence = Number(proposal?.confidence);
           const needsReview = Boolean(proposal) && (!Number.isFinite(confidence) || confidence < 0.5);
           const confidenceLabel = proposal ? `${Math.round((Number.isFinite(confidence) ? confidence : 0) * 100)}%` : "";
-          const confidenceBasis = proposal?.confidenceBasis === "filename_metadata_match" ? " · filename + metadata match" : "";
+          const confidenceBasis = proposal?.confidenceBasis === "filename_metadata_match" ? " · filename + metadata match" : proposal?.confidenceBasis === "path_inference" ? " · filename/path inference" : "";
           const notes = proposal ? `${confidenceLabel}${confidenceBasis} · ${proposal.rationale || (proposal.shouldUpdate ? "LLM identified title and author" : "Manual review needed")}` : "Not prepared";
-          const reviewBadge = needsReview ? `<span class="badge warn confidence-review">Review: below 50%</span>` : "";
+          const reviewBadge = item.sourceAvailable === false ? `<span class="badge warn confidence-review">Source unavailable · cannot import</span>` : needsReview ? `<span class="badge warn confidence-review">Review: below 50%</span>` : "";
           return `<tr class="${needsReview ? "low-confidence" : ""}"><td><input class="consolidation-select" type="checkbox" value="${escapeHtml(item.id)}" ${consolidationSelected.has(item.id) ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></td><td>${escapeHtml(item.sourceLabel)}</td><td><span>${escapeHtml(item.name)}</span><small class="muted block">${(item.size / 1048576).toFixed(1)} MB · ${escapeHtml(item.relativePath)}</small></td><td>${escapeHtml(currentText)}</td><td>${proposalCell}</td><td>${reviewBadge}<span class="confidence-note">${escapeHtml(notes)}</span></td></tr>`;
         }).join("") || `<tr><td colspan="6" class="muted empty">${data.ready ? "No supported book files found." : "Scan the source folders to build an inventory."}</td></tr>`;
         document.getElementById("consolidationPrev").disabled = consolidationOffset <= 0;

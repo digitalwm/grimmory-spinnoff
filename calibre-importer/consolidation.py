@@ -181,6 +181,16 @@ def _read_file_metadata(path: Path) -> dict:
     return values
 
 
+def _read_sidecar_metadata(path: Path) -> dict:
+    sidecar = path.parent / "metadata.opf"
+    if sidecar.is_symlink() or not sidecar.is_file() or sidecar.stat().st_size > 1_000_000:
+        return {}
+    package = ET.fromstring(sidecar.read_bytes())
+    titles = [node.text.strip() for node in package.iter() if node.tag.endswith("}title") and node.text and node.text.strip()]
+    authors = [node.text.strip() for node in package.iter() if node.tag.endswith("}creator") and node.text and node.text.strip()]
+    return {**({"title": titles[0]} if titles else {}), **({"authors": " & ".join(authors)} if authors else {})}
+
+
 def _sample_source_text(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix == ".epub":
@@ -193,6 +203,15 @@ def _sample_source_text(path: Path) -> str:
         if result.returncode:
             return ""
         return re.sub(r"\s+", " ", result.stdout).strip()[:BOOK_SAMPLE_MAX_CHARS]
+    if suffix in {".azw", ".azw3", ".mobi", ".fb2"}:
+        with tempfile.TemporaryDirectory(prefix="grimmory-sample-") as temporary:
+            output = Path(temporary) / "sample.txt"
+            result = subprocess.run(["ebook-convert", str(path), str(output)],
+                                    capture_output=True, text=True, timeout=60, check=False)
+            if result.returncode or not output.is_file():
+                return ""
+            with output.open(encoding="utf-8", errors="replace") as stream:
+                return re.sub(r"\s+", " ", stream.read(BOOK_SAMPLE_MAX_CHARS)).strip()
     return ""
 
 
@@ -278,14 +297,39 @@ def _strong_filename_metadata_match(item: dict, metadata: dict) -> bool:
 
 def _prepare_one(item_id: str, item: dict) -> dict:
     path = _source_path(item)
-    if not path.is_file():
-        raise FileNotFoundError("Source book file is no longer available")
-    metadata = _read_file_metadata(path)
-    sample = _sample_source_text(path)
-    sample_note = None if sample else (
-        "No readable opening text was extracted." if path.suffix.lower() in {".epub", ".pdf"}
-        else f"Text sampling is not enabled for {path.suffix.lower()} files; use embedded metadata and filename for review."
-    )
+    available = path.is_file()
+    source_hash = None
+    if available:
+        try:
+            source_hash = _digest(path)
+        except OSError:
+            available = False
+    metadata = {}
+    sample = ""
+    notes = []
+    if available:
+        try:
+            metadata = _read_file_metadata(path)
+        except Exception as exc:
+            notes.append(f"Embedded metadata could not be read: {exc}")
+        try:
+            sample = _sample_source_text(path)
+        except Exception as exc:
+            notes.append(f"Opening text could not be extracted: {exc}")
+    else:
+        notes.append("Source file is unavailable at the scanned path. Any identification is inferred from the filename and folders only; importing is disabled. Rescan to remove stale inventory entries.")
+    embedded_verified = bool(metadata.get("title") and metadata.get("authors"))
+    if not embedded_verified:
+        try:
+            sidecar = _read_sidecar_metadata(path)
+            if sidecar:
+                metadata = {**sidecar, **{key: value for key, value in metadata.items() if value}}
+                notes.append("Calibre metadata.opf sidecar values are supplied as additional identity evidence.")
+        except (OSError, ET.ParseError) as exc:
+            notes.append(f"Calibre sidecar metadata could not be read: {exc}")
+    if not sample:
+        notes.append("No readable opening text is available. Suggest title and authors from the filename, full path, folder names and embedded metadata, but clearly mark inference for manual review.")
+    relative = Path(item["relativePath"])
     proposal = _llm_decide({
         "id": item_id,
         "score": None,
@@ -294,11 +338,29 @@ def _prepare_one(item_id: str, item: dict) -> dict:
         "seriesName": None,
         "fileName": item["name"],
         "sourceText": item["relativePath"],
-        "reasons": [],
+        "sourcePath": str(path),
+        "relativePath": item["relativePath"],
+        "sourceAvailable": available,
+        "pathHints": {
+            "filenameParts": Path(item["name"]).stem.split(" - "),
+            "parentFolders": list(relative.parts[:-1]),
+            "bookFolderWithoutCalibreId": re.sub(r"\s*\(\d+\)$", "", relative.parent.name),
+        },
+        "reasons": notes,
         "suggestion": None,
         "bookTextSample": sample,
-        "sampleNote": sample_note,
+        "sampleNote": " ".join(notes) or None,
     })
+    source_changed = False
+    if available:
+        try:
+            source_changed = _digest(path) != source_hash
+        except OSError:
+            available = False
+            source_changed = True
+        if source_changed:
+            source_hash = None
+            notes.append("The source changed or disappeared during preparation. Prepare it again before importing.")
     title = str(proposal.get("title") or "").strip()
     authors = proposal.get("authors")
     if isinstance(authors, str):
@@ -310,10 +372,11 @@ def _prepare_one(item_id: str, item: dict) -> dict:
         confidence = float(proposal.get("confidence") or 0)
     except (TypeError, ValueError):
         confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence)) if math.isfinite(confidence) else 0.0
     llm_confidence = confidence
     confidence_basis = "llm"
     rationale = str(proposal.get("rationale") or "")
-    if not sample and confidence < 0.5 and _strong_filename_metadata_match(item, metadata):
+    if available and not source_changed and embedded_verified and not sample and confidence < 0.5 and _strong_filename_metadata_match(item, metadata):
         # Use the already embedded, independently corroborated values when the
         # book itself contains no extractable text (common for image based comics).
         title = str(metadata.get("title") or "").strip()
@@ -322,7 +385,13 @@ def _prepare_one(item_id: str, item: dict) -> dict:
         confidence = 0.65
         confidence_basis = "filename_metadata_match"
         rationale = "No readable text sample was available. The filename, embedded title and author, and author folder agree; existing embedded metadata will be retained."
-    if not math.isfinite(confidence) or confidence < 0.5:
+    path_only = not available or source_changed or (not sample and not embedded_verified)
+    if path_only:
+        confidence = min(confidence, 0.49)
+        confidence_basis = "path_inference"
+    if notes:
+        rationale = " ".join([rationale, *notes]).strip()
+    if confidence < 0.5:
         short_title = re.split(r"[(:]", title, maxsplit=1)[0].strip()
         if short_title != title:
             title = short_title
@@ -334,9 +403,10 @@ def _prepare_one(item_id: str, item: dict) -> dict:
         "llmConfidence": llm_confidence,
         "confidenceBasis": confidence_basis,
         "rationale": rationale,
-        "shouldUpdate": bool(proposal.get("should_update")),
+        "shouldUpdate": available and not path_only and bool(proposal.get("should_update")),
         "sampleAvailable": bool(sample),
-        "sourceHash": _digest(path),
+        "sourceAvailable": available,
+        "sourceHash": source_hash if available else None,
         "_currentMetadata": metadata,
     }
 
@@ -365,6 +435,7 @@ def prepare_selected(ids: list[str], auto_import: bool = False) -> dict:
                     try:
                         proposal = _prepare_one(item_id, item)
                         item["prepared"] = True
+                        item["sourceAvailable"] = proposal.get("sourceAvailable", True)
                         item["currentMetadata"] = proposal.pop("_currentMetadata", {})
                         item["proposal"] = proposal
                         if proposal["title"] and proposal["authors"] and proposal["confidence"] >= 0.5:
@@ -390,7 +461,7 @@ def prepare_selected(ids: list[str], auto_import: bool = False) -> dict:
                     if isinstance(authors, str):
                         authors = [part.strip() for part in authors.split(";") if part.strip()]
                     authors = [str(author).strip() for author in authors if str(author).strip()]
-                    if item.get("prepared") and float(proposal.get("confidence") or 0) >= 0.5 and title and authors:
+                    if item.get("prepared") and proposal.get("sourceAvailable", True) and proposal.get("sourceHash") and float(proposal.get("confidence") or 0) >= 0.5 and title and authors:
                         entries.append({"id": item_id, "title": title, "authors": authors})
                 PREPARE_STATE["autoImportEligible"] = len(entries)
                 PREPARE_STATE["autoImportHeld"] = len(selected) - len(entries)

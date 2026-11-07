@@ -24,6 +24,17 @@ The metadata completeness score remains a measure of populated fields, not ident
 confidence. Ambiguous matches may need manual metadata selection. Existing library
 records have not been subjected to bulk duplicate or metadata cleanup.
 
+## Legacy collection identification
+
+Legacy preparation reads remaining Calibre metadata.opf sidecars when embedded
+metadata cannot be read. It sends the filename, full source path, relative path, and folder
+hints to the LLM, alongside embedded metadata and a bounded opening-text sample.
+AZW/AZW3/MOBI/FB2 files can supply text through a temporary Calibre conversion.
+If a scanned file disappeared or its metadata is unreadable, the model can still
+suggest title/author from path evidence for manual review. Missing files are marked
+unavailable and cannot be staged; path-only suggestions stay below 50% confidence.
+Changed source bytes invalidate preparation. Rescanning removes stale inventory rows.
+
 ## BookDrop metadata matches
 
 Stored fetched suggestions are revalidated against embedded title/author identity
