@@ -26,7 +26,7 @@ describe('DuplicateMergerComponent', () => {
   const changeDetectorRef = {markForCheck: vi.fn()};
   const dialogConfig = {data: {libraryId: 1}};
   const bookFileService = {findDuplicates: vi.fn()};
-  const reconciliation = {quickMerge: vi.fn(),notDuplicates:vi.fn()};
+  const reconciliation = {beginBatch:vi.fn(),endBatch:vi.fn(),quickMerge: vi.fn(),notDuplicates:vi.fn()};
   const bookService = {deleteBooks: vi.fn()};
   const confirmationService = {confirm: vi.fn()};
   const messageService = {add: vi.fn()};
@@ -152,6 +152,21 @@ describe('DuplicateMergerComponent', () => {
     component.ngOnInit();component.groups=[display(1),display(3)];reconciliation.quickMerge.mockReturnValue(throwError(()=>({status:0})));
     confirmationService.confirm.mockImplementation(config=>config.accept());component.mergeAll();await vi.waitFor(()=>expect(component.isMerging()).toBe(false));
     expect(reconciliation.quickMerge).toHaveBeenCalledTimes(1);expect(component.activeGroups).toHaveLength(2);
+  });
+
+  it('resumes only unattempted groups after a temporary server failure without repeating an uncertain merge',async()=>{
+    component.ngOnInit();component.groups=[display(1),display(3),display(5)];
+    reconciliation.quickMerge.mockReturnValueOnce(of(merged)).mockReturnValueOnce(throwError(()=>({status:503})))
+      .mockReturnValueOnce(of({...merged,receipt:{...receipt,targetBookId:5,removedBookIds:[6]}}));
+    confirmationService.confirm.mockImplementation(config=>config.accept());component.mergeAll();
+    await vi.waitFor(()=>expect(component.isMerging()).toBe(false));
+    expect(reconciliation.quickMerge).toHaveBeenCalledTimes(2);expect(component.remainingBatch()).toBe(1);
+    expect(component.batchNotice()).toBeTruthy();component.mergeAll();
+    await vi.waitFor(()=>expect(component.isMerging()).toBe(false));
+    expect(reconciliation.quickMerge).toHaveBeenCalledTimes(3);expect(confirmationService.confirm).toHaveBeenCalledTimes(1);
+    expect(component.groups[0].dismissed).toBe(true);expect(component.groups[1].dismissed).toBe(false);expect(component.groups[2].dismissed).toBe(true);
+    expect(reconciliation.beginBatch).toHaveBeenCalledTimes(2);expect(reconciliation.endBatch).toHaveBeenCalledTimes(2);
+    expect(component.remainingBatch()).toBe(0);
   });
 
 });

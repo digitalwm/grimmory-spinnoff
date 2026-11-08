@@ -92,7 +92,7 @@
         <p>{{ 'book.catalogueReconciliation.formatsNotice' | transloco }}</p>
         @if (activeGroups.length > 0) {
           <p-button
-            [label]="'book.catalogueReconciliation.mergeSimple' | transloco"
+            [label]="(remainingBatch() ? 'book.catalogueReconciliation.resumeBatch' : 'book.catalogueReconciliation.mergeSimple') | transloco"
             icon="pi pi-check-circle"
             severity="success"
             (click)="mergeAll()"
@@ -102,6 +102,9 @@
       </div>
     </div>
 
+    @if (batchNotice()) {
+      <p role="status">{{ batchNotice() }} @if (remainingBatch()) { {{ 'book.catalogueReconciliation.remainingBatch' | transloco:{count:remainingBatch()} }} }</p>
+    }
     <!-- Merge Progress -->
     @if (batchRunning()) {
       <p-button [label]="(stopRequested() ? 'book.catalogueReconciliation.stopping' : 'book.catalogueReconciliation.stopBatch') | transloco" severity="secondary" (click)="stopBatch()" [disabled]="stopRequested()" />

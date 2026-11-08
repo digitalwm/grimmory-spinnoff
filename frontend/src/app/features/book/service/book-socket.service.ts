@@ -24,10 +24,32 @@ export class BookSocketService {
   private readonly reconciliationDelayMs = 50;
   private readonly pendingChangedBookIds = new Set<number>();
   private readonly pendingDeletedBookIds = new Set<number>();
+  private batchDepth = 0;
+  private fullRefreshPending = false;
+  private readonly catalogueDeletedIds = new Set<number>();
   private reconciliationTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.destroyRef.onDestroy(() => this.clearPendingReconciliation());
+  }
+
+  beginBatch(): void {
+    this.batchDepth++;
+    if(this.reconciliationTimer!==null){clearTimeout(this.reconciliationTimer);this.reconciliationTimer=null;}
+  }
+
+  endBatch(): void {
+    this.batchDepth=Math.max(0,this.batchDepth-1);
+    if(this.batchDepth)return;
+    if(this.fullRefreshPending){this.fullRefreshPending=false;this.clearPendingReconciliation();invalidateAllBookCaches(this.queryClient);}
+    else if(this.pendingChangedBookIds.size||this.pendingDeletedBookIds.size)this.scheduleReconciliation();
+  }
+
+  recordCatalogueMerge(targetId:number, removedIds:readonly number[]): void {
+    this.queueDeletedBooks(removedIds);
+    for(const id of removedIds)this.catalogueDeletedIds.add(id);
+    while(this.catalogueDeletedIds.size>10_000)this.catalogueDeletedIds.delete(this.catalogueDeletedIds.values().next().value!);
+    this.queueKnownChanges([targetId]);
   }
 
   handleNewlyCreatedBook(book: Book): void {
@@ -35,7 +57,7 @@ export class BookSocketService {
   }
 
   handleRemovedBookIds(bookIds: readonly number[]): void {
-    this.queueDeletedBooks(bookIds);
+    this.queueDeletedBooks(bookIds.filter(id=>!this.catalogueDeletedIds.has(id)));
   }
 
   handleBookUpdate(payload: Book | readonly number[]): void {
@@ -65,6 +87,7 @@ export class BookSocketService {
   }
 
   handleReconnect(): void {
+    if(this.batchDepth){this.fullRefreshPending=true;return;}
     this.clearPendingReconciliation();
     invalidateAllBookCaches(this.queryClient);
   }
@@ -79,6 +102,7 @@ export class BookSocketService {
   }
 
   private queueDeletedBooks(bookIds: readonly number[]): void {
+    if(!bookIds.length)return;
     for (const bookId of bookIds) {
       this.pendingChangedBookIds.delete(bookId);
       this.pendingDeletedBookIds.add(bookId);
@@ -87,7 +111,7 @@ export class BookSocketService {
   }
 
   private scheduleReconciliation(): void {
-    if (this.reconciliationTimer !== null) {
+    if (this.batchDepth || this.reconciliationTimer !== null) {
       return;
     }
 

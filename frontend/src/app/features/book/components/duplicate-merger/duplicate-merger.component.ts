@@ -73,6 +73,10 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   separatedBookIds: number[] = [];
   readonly stopRequested = signal(false);
   readonly batchRunning = signal(false);
+  readonly batchNotice = signal('');
+  readonly remainingBatch = signal(0);
+  private pendingBatch: DisplayGroup[] = [];
+  private batchCounts = {merged:0,review:0,failed:0};
   reviewedGroupFinished = false;
   presetMode: PresetMode = 'balanced';
   showAdvanced = false;
@@ -158,6 +162,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   }
 
   scan(): void {
+    this.pendingBatch=[];this.remainingBatch.set(0);this.batchNotice.set('');
     this.isScanning.set(true);
     this.hasScanned.set(false);
     this.groups = [];
@@ -349,6 +354,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
 
   mergeAll(): void {
     if (this.isMerging() || this.catalogueMerging || !this.activeGroups.length) return;
+    if(this.pendingBatch.length){const pending=this.pendingBatch;this.pendingBatch=[];void this.runBatch(pending,true);return;}
     const queue = [...this.activeGroups];
     this.confirmationService.confirm({
       header:this.t.translate('book.catalogueReconciliation.batchTitle'),
@@ -360,11 +366,14 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
 
   stopBatch(): void {this.stopRequested.set(true);}
 
-  private async runBatch(queue: DisplayGroup[]): Promise<void> {
+  private async runBatch(queue: DisplayGroup[], resume = false): Promise<void> {
     if (this.isMerging() || this.disposed) return;
     this.isMerging.set(true); this.batchRunning.set(true); this.stopRequested.set(false);
-    this.mergeTotal.set(queue.length); this.mergeProgress.set(0);
-    let merged=0,review=0,failed=0;
+    this.batchNotice.set('');this.remainingBatch.set(0);
+    if(!resume){this.mergeTotal.set(queue.length);this.mergeProgress.set(0);this.batchCounts={merged:0,review:0,failed:0};}
+    let {merged,review,failed}=this.batchCounts;
+    let processed=0;
+    this.reconciliation.beginBatch();
     try {
       for (const group of queue) {
         if (this.stopRequested() || this.disposed) break;
@@ -376,14 +385,23 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
             else {group.reviewAssessment=result;review++;}
           } catch (err: any) {
             group.error=err?.error?.message || this.t.translate('book.catalogueReconciliation.operationFailed');failed++;
-            if (!err?.status || err.status>=500 || err.status===401 || err.status===403) this.stopRequested.set(true);
+            if (!err?.status || err.status>=500 || err.status===401 || err.status===403 || err.status===429) {
+              this.stopRequested.set(true);
+              this.batchNotice.set(this.t.translate('book.catalogueReconciliation.batchPausedError',{status:err?.status || 'network'}));
+            }
           }
         }
+        processed++;
         this.mergeProgress.update(value=>value+1);
       }
     } finally {
+      this.reconciliation.endBatch();
+      this.batchCounts={merged,review,failed};
+      this.pendingBatch=this.disposed?[]:queue.slice(processed).filter(group=>!group.dismissed);
+      this.remainingBatch.set(this.pendingBatch.length);
+      if(this.pendingBatch.length&&!this.batchNotice())this.batchNotice.set(this.t.translate('book.catalogueReconciliation.batchPausedByUser'));
       this.batchRunning.set(false); this.isMerging.set(false);
-      if (!this.disposed) this.messageService.add({severity:failed?'warn':'success',summary:this.t.translate('book.catalogueReconciliation.batchFinished'),
+      if (!this.disposed) this.messageService.add({severity:failed?'warn':'success',summary:this.t.translate(this.pendingBatch.length?'book.catalogueReconciliation.batchPaused':'book.catalogueReconciliation.batchFinished'),
         detail:this.t.translate('book.catalogueReconciliation.batchSummary',{merged,review,failed})});
     }
   }

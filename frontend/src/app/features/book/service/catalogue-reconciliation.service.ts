@@ -3,6 +3,7 @@ import {HttpClient} from '@angular/common/http';
 import {QueryClient} from '@tanstack/angular-query-experimental';
 import {tap} from 'rxjs/operators';
 import {API_CONFIG} from '../../../core/config/api-config';
+import {BookSocketService} from './book-socket.service';
 import {bookQueryKeys} from '../data/book-query-keys';
 
 export interface CatalogueMember {
@@ -74,6 +75,11 @@ export interface CatalogueReceiptSummary {
 export class CatalogueReconciliationService {
   private readonly http = inject(HttpClient);
   private readonly queryClient = inject(QueryClient);
+  private readonly sockets = inject(BookSocketService);
+  private batchActive = false;
+
+  beginBatch(): void {if(!this.batchActive){this.batchActive=true;this.sockets.beginBatch();}}
+  endBatch(): void {if(this.batchActive){this.batchActive=false;this.sockets.endBatch();}}
   private readonly url = `${API_CONFIG.BASE_URL}/api/v1/books/catalogue-reconciliation`;
 
   scan(libraryId: number, page: number, search = '', offset?: number) {
@@ -87,7 +93,10 @@ export class CatalogueReconciliationService {
   quickMerge(libraryId: number, group: CatalogueGroup, targetBookId: number) {
     return this.http.post<QuickMergeResult>(`${this.url}/quick-merge`, {
       libraryId, bookIds: group.members.map(member => member.bookId), targetBookId,
-    }).pipe(tap(result => {if (result.status === 'MERGED') void this.queryClient.invalidateQueries({queryKey: bookQueryKeys.all()});}));
+    }).pipe(tap(result => {if (result.status === 'MERGED') {
+      if(this.batchActive && result.receipt)this.sockets.recordCatalogueMerge(result.receipt.targetBookId,result.receipt.removedBookIds);
+      else void this.queryClient.invalidateQueries({queryKey: bookQueryKeys.all()});
+    }}));
   }
   merge(preview: CataloguePreview) {
     return this.http.post<CatalogueReceipt>(`${this.url}/merge`, {

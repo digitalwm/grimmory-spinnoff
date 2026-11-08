@@ -3,6 +3,7 @@ import {HttpTestingController} from '@angular/common/http/testing';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createQueryClientHarness} from '../../../core/testing/query-testing';
 import {CatalogueGroup, CataloguePreview, CatalogueReconciliationService} from './catalogue-reconciliation.service';
+import {BookSocketService} from './book-socket.service';
 import {bookQueryKeys} from '../data/book-query-keys';
 
 describe('CatalogueReconciliationService', () => {
@@ -54,6 +55,15 @@ describe('CatalogueReconciliationService', () => {
     request.flush({status:'REVIEW_REQUIRED',receipt:null,preview,reviewReasons:['Different editions']});expect(invalidate).not.toHaveBeenCalled();
     service.quickMerge(7,group,1).subscribe();request=http.expectOne(req=>req.url.endsWith('/quick-merge'));
     request.flush({status:'MERGED',receipt:{id:'receipt'},preview:null,reviewReasons:[]});expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces successful batch merges without invalidating library queries per group',()=>{
+    const sockets=TestBed.inject(BookSocketService);const begin=vi.spyOn(sockets,'beginBatch');const end=vi.spyOn(sockets,'endBatch');
+    const record=vi.spyOn(sockets,'recordCatalogueMerge');const invalidate=vi.spyOn(harness.queryClient,'invalidateQueries');
+    service.beginBatch();service.beginBatch();service.quickMerge(7,group,1).subscribe();
+    http.expectOne(req=>req.url.endsWith('/quick-merge')).flush({status:'MERGED',receipt:{id:'receipt',targetBookId:1,removedBookIds:[2]},reviewReasons:[]});
+    expect(invalidate).not.toHaveBeenCalled();expect(record).toHaveBeenCalledWith(1,[2]);
+    service.endBatch();service.endBatch();expect(begin).toHaveBeenCalledTimes(1);expect(end).toHaveBeenCalledTimes(1);
   });
 
 });

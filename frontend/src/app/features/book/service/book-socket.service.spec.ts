@@ -217,4 +217,21 @@ describe('BookSocketService', () => {
     expect(isInvalidated(bookRecommendationsQueryKey(1, 20))).toBe(true);
     expect(isInvalidated(bookQueryKeys.detail(1, false))).toBe(true);
   });
+  it('defers batch receipt and websocket refreshes until completion and ignores late duplicate remove events',()=>{
+    const invalidate=vi.spyOn(queryClient,'invalidateQueries');
+    queryClient.setQueryData<Book[]>(BOOKS_QUERY_KEY,[makeBook(1),makeBook(2),makeBook(3),makeBook(4)]);
+    service.beginBatch();service.recordCatalogueMerge(1,[2]);service.handleRemovedBookIds([2]);
+    service.recordCatalogueMerge(3,[4]);vi.advanceTimersByTime(1000);
+    expect(invalidate).not.toHaveBeenCalled();service.endBatch();vi.advanceTimersByTime(100);
+    expect(invalidate).toHaveBeenCalled();const count=invalidate.mock.calls.length;
+    service.handleRemovedBookIds([2,4]);vi.advanceTimersByTime(100);
+    expect(invalidate).toHaveBeenCalledTimes(count);
+  });
+  it('retains deferred socket changes across nested batches and reconnects',()=>{
+    const invalidate=vi.spyOn(queryClient,'invalidateQueries');
+    service.beginBatch();service.beginBatch();service.handleRemovedBookIds([2]);service.handleReconnect();
+    service.endBatch();vi.advanceTimersByTime(1000);expect(invalidate).not.toHaveBeenCalled();
+    service.endBatch();expect(invalidate).toHaveBeenCalled();
+  });
+
 });

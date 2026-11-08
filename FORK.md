@@ -89,8 +89,12 @@ for manual review at any time. Scanning and previewing are read-only.
 **Merge straightforward groups** checks the entire scanned list after one batch
 confirmation. It processes one group at a time, leaves complex groups for review,
 and can stop after the current operation. Keep the window open during the batch.
-Transport/authorization/server failures stop the batch without automatically retrying
-an uncertain operation. Every committed group retains its own receipt and journal.
+Transport/authorization/server/throttling failures pause the batch with a visible
+reason. **Resume remaining groups** continues only groups not yet attempted, using
+the original batch confirmation; uncertain failed operations are never retried
+automatically. Stop after current group also preserves the remaining queue.
+During a batch, receipt and socket updates accumulate without triggering repeated
+full-library refreshes; one reconciliation runs when the batch ends or pauses. Every committed group retains its own receipt and journal.
 
 Merge uses exactly the selected records and keeps the target metadata and default
 file. Differences in contents, language, series, contributor credits or source
