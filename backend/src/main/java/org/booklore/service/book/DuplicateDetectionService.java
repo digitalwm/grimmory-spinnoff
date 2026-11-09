@@ -89,28 +89,11 @@ public class DuplicateDetectionService {
 
         List<DuplicateGroup> result = new ArrayList<>();
         for (List<BookEntity> candidates : isbnGroups.values()) {
-            // ISBNs are often copied onto the wrong book during imports. Require author
-            // agreement before allowing an ISBN collision to consume unrelated records.
-            Map<Long, Set<String>> authors = new HashMap<>();
-            for (BookEntity book : candidates) {
-                authors.put(book.getId(), identityAuthors(book));
-            }
-            Map<Long, Long> parent = new HashMap<>();
-            Map<String, Long> firstByAuthor = new HashMap<>();
-            for (BookEntity book : candidates) {
-                if (authors.get(book.getId()).isEmpty()) continue;
-                parent.put(book.getId(), book.getId());
-                for (String author : authors.get(book.getId())) {
-                    Long first = firstByAuthor.putIfAbsent(author, book.getId());
-                    if (first != null) union(parent, book.getId(), first);
-                }
-            }
-            Map<Long, List<BookEntity>> authorGroups = new HashMap<>();
-            for (BookEntity book : candidates) {
-                if (!parent.containsKey(book.getId())) continue;
-                authorGroups.computeIfAbsent(find(parent, book.getId()), ignored -> new ArrayList<>()).add(book);
-            }
-            for (List<BookEntity> group : authorGroups.values()) {
+            // ISBNs can be copied onto unrelated books. Require agreeing authors
+            // and compatible subtitle/series identity before grouping a collision.
+            List<BookEntity> withAuthors = candidates.stream()
+                    .filter(book -> !identityAuthors(book).isEmpty()).toList();
+            for (List<BookEntity> group : clusterCompatibleBooks(withAuthors, true)) {
                 if (group.size() < 2) continue;
                 group.forEach(book -> alreadyGrouped.add(book.getId()));
                 result.add(toDuplicateGroup(group, "ISBN", formatPriority));
@@ -121,7 +104,6 @@ public class DuplicateDetectionService {
 
     private List<DuplicateGroup> findByExternalId(List<BookEntity> books, Set<Long> alreadyGrouped, List<BookFileType> formatPriority) {
         Map<Long, Long> parent = new HashMap<>();
-        Map<Long, BookEntity> bookMap = new HashMap<>();
 
         List<BookEntity> candidates = books.stream()
                 .filter(b -> !alreadyGrouped.contains(b.getId()))
@@ -129,7 +111,6 @@ public class DuplicateDetectionService {
                 .toList();
 
         for (BookEntity book : candidates) {
-            bookMap.put(book.getId(), book);
             parent.put(book.getId(), book.getId());
         }
 
@@ -148,7 +129,7 @@ public class DuplicateDetectionService {
                 for (int j = i + 1; j < matchingExternalId.size(); j++) {
                     BookEntity first = matchingExternalId.get(i);
                     BookEntity second = matchingExternalId.get(j);
-                    if (externalIdAuthorsConflict(first, second)) continue;
+                    if (!identitiesAreCompatible(first, second)) continue;
                     union(parent, first.getId(), second.getId());
                 }
             }
@@ -161,10 +142,12 @@ public class DuplicateDetectionService {
         }
 
         List<DuplicateGroup> result = new ArrayList<>();
-        for (List<BookEntity> group : groups.values()) {
-            if (group.size() < 2) continue;
-            group.forEach(b -> alreadyGrouped.add(b.getId()));
-            result.add(toDuplicateGroup(group, "EXTERNAL_ID", formatPriority));
+        for (List<BookEntity> component : groups.values()) {
+            for (List<BookEntity> group : clusterCompatibleBooks(component, false)) {
+                if (group.size() < 2) continue;
+                group.forEach(b -> alreadyGrouped.add(b.getId()));
+                result.add(toDuplicateGroup(group, "EXTERNAL_ID", formatPriority));
+            }
         }
         return result;
     }
@@ -228,35 +211,9 @@ public class DuplicateDetectionService {
 
             if (withAuthors.size() < 2) continue;
 
-            Map<Long, Set<String>> normalizedAuthors = new HashMap<>();
-            for (BookEntity book : withAuthors) {
-                normalizedAuthors.put(book.getId(), identityAuthors(book));
-            }
-
-            Map<Long, Long> parent = new HashMap<>();
-            for (BookEntity book : withAuthors) {
-                parent.put(book.getId(), book.getId());
-            }
-
-            // One shared contributor in a large anthology should not connect all
-            // books with a generic title (for example, the Star Wars franchise).
-            for (int i = 0; i < withAuthors.size(); i++) {
-                for (int j = i + 1; j < withAuthors.size(); j++) {
-                    BookEntity first = withAuthors.get(i);
-                    BookEntity second = withAuthors.get(j);
-                    if (authorsAreSimilar(normalizedAuthors.get(first.getId()), normalizedAuthors.get(second.getId()))
-                            && !hasConflictingBookIdentityDetails(first.getMetadata(), second.getMetadata()))
-                        union(parent, first.getId(), second.getId());
-                }
-            }
-
-            Map<Long, List<BookEntity>> subGroups = new HashMap<>();
-            for (BookEntity book : withAuthors) {
-                Long root = find(parent, book.getId());
-                subGroups.computeIfAbsent(root, k -> new ArrayList<>()).add(book);
-            }
-
-            for (List<BookEntity> subGroup : subGroups.values()) {
+            // Complete-link clustering prevents a record with missing subtitle
+            // metadata from bridging two different books in the same series.
+            for (List<BookEntity> subGroup : clusterCompatibleBooks(withAuthors, true)) {
                 if (subGroup.size() < 2) continue;
                 subGroup.forEach(b -> alreadyGrouped.add(b.getId()));
                 result.add(toDuplicateGroup(subGroup, "TITLE_AUTHOR", formatPriority));
@@ -274,17 +231,6 @@ public class DuplicateDetectionService {
                 .map(BookUtils::normalizeForSearch).filter(name -> name != null && !name.isBlank())
                 // Imported publisher or franchise labels sometimes appear as author values.
                 .filter(name -> !name.equals(title)).collect(Collectors.toSet());
-    }
-
-    private boolean externalIdAuthorsConflict(BookEntity first, BookEntity second) {
-        List<AuthorEntity> firstAuthors = first.getMetadata().getAuthors();
-        List<AuthorEntity> secondAuthors = second.getMetadata().getAuthors();
-        boolean firstHasAuthors = firstAuthors != null && firstAuthors.stream().anyMatch(author -> author.getName() != null && !author.getName().isBlank());
-        boolean secondHasAuthors = secondAuthors != null && secondAuthors.stream().anyMatch(author -> author.getName() != null && !author.getName().isBlank());
-        if (!firstHasAuthors || !secondHasAuthors) return false;
-        Set<String> firstIdentity = identityAuthors(first);
-        Set<String> secondIdentity = identityAuthors(second);
-        return !authorsAreSimilar(firstIdentity, secondIdentity);
     }
 
     private boolean authorsAreSimilar(Set<String> first, Set<String> second) {
@@ -310,6 +256,36 @@ public class DuplicateDetectionService {
 
     private boolean hasValue(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean identitiesAreCompatible(BookEntity first, BookEntity second) {
+        BookMetadataEntity firstMetadata = first.getMetadata();
+        BookMetadataEntity secondMetadata = second.getMetadata();
+        if (firstMetadata == null || secondMetadata == null) return true;
+
+        String firstTitle = BookUtils.normalizeForSearch(firstMetadata.getTitle());
+        String secondTitle = BookUtils.normalizeForSearch(secondMetadata.getTitle());
+        if (hasValue(firstTitle) && hasValue(secondTitle) && !firstTitle.equals(secondTitle)) return false;
+        if (hasConflictingBookIdentityDetails(firstMetadata, secondMetadata)) return false;
+
+        Set<String> firstAuthors = identityAuthors(first);
+        Set<String> secondAuthors = identityAuthors(second);
+        return firstAuthors.isEmpty() || secondAuthors.isEmpty() || authorsAreSimilar(firstAuthors, secondAuthors);
+    }
+
+    private List<List<BookEntity>> clusterCompatibleBooks(List<BookEntity> candidates, boolean requireSimilarAuthors) {
+        List<List<BookEntity>> clusters = new ArrayList<>();
+        for (BookEntity candidate : candidates) {
+            Set<String> candidateAuthors = identityAuthors(candidate);
+            List<BookEntity> compatibleCluster = clusters.stream()
+                    .filter(cluster -> cluster.stream().allMatch(existing ->
+                            identitiesAreCompatible(candidate, existing)
+                                    && (!requireSimilarAuthors || authorsAreSimilar(candidateAuthors, identityAuthors(existing)))))
+                    .findFirst().orElse(null);
+            if (compatibleCluster == null) clusters.add(new ArrayList<>(List.of(candidate)));
+            else compatibleCluster.add(candidate);
+        }
+        return clusters;
     }
 
     private List<DuplicateGroup> findByDirectory(List<BookEntity> books, Set<Long> alreadyGrouped, List<BookFileType> formatPriority) {
@@ -362,10 +338,12 @@ public class DuplicateDetectionService {
     private List<DuplicateGroup> buildGroups(Map<String, List<BookEntity>> groupMap, String reason,
                                               Set<Long> alreadyGrouped, List<BookFileType> formatPriority) {
         List<DuplicateGroup> result = new ArrayList<>();
-        for (List<BookEntity> group : groupMap.values()) {
-            if (group.size() < 2) continue;
-            group.forEach(b -> alreadyGrouped.add(b.getId()));
-            result.add(toDuplicateGroup(group, reason, formatPriority));
+        for (List<BookEntity> candidates : groupMap.values()) {
+            for (List<BookEntity> group : clusterCompatibleBooks(candidates, false)) {
+                if (group.size() < 2) continue;
+                group.forEach(b -> alreadyGrouped.add(b.getId()));
+                result.add(toDuplicateGroup(group, reason, formatPriority));
+            }
         }
         return result;
     }

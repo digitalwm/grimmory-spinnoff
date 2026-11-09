@@ -31,7 +31,8 @@ public class DuplicateCandidateLoader {
         Map<Long,BookEntity> books=new LinkedHashMap<>();
         jdbc.query("""
                 SELECT b.id,b.metadata_match_score,b.is_physical,b.library_path_id,p.path,
-                       m.title,m.isbn_13,m.isbn_10,m.goodreads_id,m.hardcover_id,m.google_id,
+                       m.title,m.subtitle,m.series_name,m.series_number,
+                       m.isbn_13,m.isbn_10,m.goodreads_id,m.hardcover_id,m.google_id,
                        m.asin,m.audible_id,m.comicvine_id,m.applebooks_id,m.openlibrary_id,m.cover_updated_on
                 FROM book b LEFT JOIN book_metadata m ON m.book_id=b.id
                 LEFT JOIN library_path p ON p.id=b.library_path_id
@@ -40,6 +41,8 @@ public class DuplicateCandidateLoader {
             long id=rs.getLong("id");
             var cover=rs.getTimestamp("cover_updated_on");
             var metadata=BookMetadataEntity.builder().bookId(id).title(rs.getString("title"))
+                    .subtitle(rs.getString("subtitle")).seriesName(rs.getString("series_name"))
+                    .seriesNumber(rs.getObject("series_number")==null?null:rs.getFloat("series_number"))
                     .isbn13(rs.getString("isbn_13")).isbn10(rs.getString("isbn_10"))
                     .goodreadsId(rs.getString("goodreads_id")).hardcoverId(rs.getString("hardcover_id"))
                     .googleId(rs.getString("google_id")).asin(rs.getString("asin")).audibleId(rs.getString("audible_id"))
