@@ -63,7 +63,8 @@ remains required for every protected request.
 
 ## Human duplicate decisions
 
-When identity validation disagrees with the administrator, **I confirm these are
+In the detailed review screen, when identity validation disagrees with the
+administrator, **I confirm these are
 the same book — use my target** requests a new preview bound to that decision.
 The final merge still requires its confirmation and current token; the override
 only resolves title/author identity checks, not file integrity, reading conflicts,
@@ -82,6 +83,12 @@ Open a library's menu, then **Manage library → Find duplicates → Catalogue d
 Administrators can search titles/filenames, scan duplicate candidates, inspect a
 complete group, choose the surviving record, and merge straightforward groups directly from the list. **Merge** runs the
 checks and commits a straightforward group in one operation and stays on the list.
+In **Formats and potential duplicates**, a blocked author or title identity check
+shows **Same book / author — merge into selected target** on that group. Clicking
+it records the human identity decision and merges directly into the selected target,
+without a review screen or another confirmation. Other safety checks still run;
+remaining blockers stay inline. Automatic batch merging never confirms identity.
+
 Blocking issues appear inline; **Resolve issue** opens the assessment only when
 explicitly selected. Merge never opens a preview automatically. **Inspect group** remains available
 for manual review at any time. Scanning and previewing are read-only.

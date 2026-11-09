@@ -471,6 +471,23 @@ class CatalogueReconciliationServiceTest {
         assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
     }
 
+    @Test void inlineIdentityDecisionMergesSelectedTargetAndArchivesHumanConfirmation() {
+        jdbc.update("INSERT INTO author VALUES(2,'Another author')");
+        jdbc.update("UPDATE book_metadata_author_mapping SET author_id=2 WHERE book_id=2");
+        assertEquals("REVIEW_REQUIRED",quick(List.of(1L,2L),2).status());
+        assertThrows(APIException.class,()->transaction.execute(status->service.confirmIdentityAndMerge(1,List.of(1L,2L),2,false)));
+        var result=transaction.execute(status->service.confirmIdentityAndMerge(1,List.of(1L,2L),2,true));
+        assertEquals("MERGED",result.status());assertEquals(2,result.receipt().targetBookId());
+        assertEquals(1,count("book"));
+        assertTrue(jdbc.queryForObject("SELECT after_json FROM catalogue_reconciliation_audit",String.class).contains("\"_human_identity_confirmed\":true"));
+    }
+    @Test void inlineIdentityDecisionStillBlocksConflictingReadingData() {
+        jdbc.update("INSERT INTO user_book_progress VALUES(101,1,8,'one'),(102,2,8,'two')");
+        var result=transaction.execute(status->service.confirmIdentityAndMerge(1,List.of(1L,2L),1,true));
+        assertEquals("REVIEW_REQUIRED",result.status());assertTrue(result.preview().identityConfirmed());
+        assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
+    }
+
     @Test void humanIdentityDecisionAllowsBenAndBenjaminWithSelectedMetadataAndFile() {
         jdbc.update("UPDATE book_metadata SET title='The Rest of Our Lives'");
         jdbc.update("UPDATE author SET name='Ben Markovits' WHERE id=1");

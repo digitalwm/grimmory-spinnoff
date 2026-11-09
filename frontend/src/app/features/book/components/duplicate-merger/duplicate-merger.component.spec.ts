@@ -26,7 +26,7 @@ describe('DuplicateMergerComponent', () => {
   const changeDetectorRef = {markForCheck: vi.fn()};
   const dialogConfig = {data: {libraryId: 1}};
   const bookFileService = {findDuplicates: vi.fn()};
-  const reconciliation = {beginBatch:vi.fn(),endBatch:vi.fn(),quickMerge: vi.fn(),notDuplicates:vi.fn()};
+  const reconciliation = {beginBatch:vi.fn(),endBatch:vi.fn(),quickMerge: vi.fn(),confirmIdentityAndMerge:vi.fn(),notDuplicates:vi.fn()};
   const bookService = {deleteBooks: vi.fn()};
   const confirmationService = {confirm: vi.fn()};
   const messageService = {add: vi.fn()};
@@ -37,7 +37,7 @@ describe('DuplicateMergerComponent', () => {
   let component: DuplicateMergerComponent;
 
   beforeEach(() => {
-    vi.restoreAllMocks(); vi.clearAllMocks(); reconciliation.quickMerge.mockReset();
+    vi.restoreAllMocks(); vi.clearAllMocks(); reconciliation.quickMerge.mockReset(); reconciliation.confirmIdentityAndMerge.mockReset();
     appSettingsService.appSettings.set(null);
 
     TestBed.resetTestingModule();
@@ -132,6 +132,23 @@ describe('DuplicateMergerComponent', () => {
     await component.mergeGroup(group);expect(component.mode).toBe('formats');expect(component.reviewedGroup).toBeNull();expect(component.groups[0].reviewAssessment).toBe(review);expect(group.dismissed).toBe(false);
     await component.mergeGroup(group);expect(reconciliation.quickMerge).toHaveBeenCalledTimes(1);expect(component.mode).toBe('formats');
     component.reviewGroup(group);expect(component.mode).toBe('catalogue');expect(component.reviewAssessment).toBe(review);
+  });
+  it('confirms an author mismatch and merges inline without review, dialogs or rescanning', async () => {
+    component.ngOnInit();const group=display(1);component.groups=[group];component.hasScanned.set(true);
+    const blocked:QuickMergeResult={...review,reviewReasons:['Titles or authors disagree. Resolve the metadata before merging.']};
+    reconciliation.quickMerge.mockReturnValue(of(blocked));await component.mergeGroup(group);
+    expect(component.canConfirmIdentity(group)).toBe(true);
+    reconciliation.confirmIdentityAndMerge.mockReturnValue(of(merged));await component.mergeGroup(group,true);
+    expect(reconciliation.confirmIdentityAndMerge).toHaveBeenCalledWith(1,expect.objectContaining({members:expect.any(Array)}),1);
+    expect(group.dismissed).toBe(true);expect(component.mode).toBe('formats');expect(component.reviewedGroup).toBeNull();
+    expect(confirmationService.confirm).not.toHaveBeenCalled();expect(bookFileService.findDuplicates).not.toHaveBeenCalled();
+  });
+  it('keeps remaining safety blockers inline and removes the identity action after confirmation',async()=>{
+    component.ngOnInit();const group=display(1);component.groups=[group];
+    reconciliation.quickMerge.mockReturnValue(of({...review,reviewReasons:['Author identity is incomplete.']}));await component.mergeGroup(group);
+    reconciliation.confirmIdentityAndMerge.mockReturnValue(of(review));await component.mergeGroup(group,true);
+    expect(component.canConfirmIdentity(group)).toBe(false);expect(group.dismissed).toBe(false);expect(component.mode).toBe('formats');
+    await component.mergeGroup(group,true);expect(reconciliation.confirmIdentityAndMerge).toHaveBeenCalledTimes(1);
   });
   it('checks a whole list after one batch confirmation and leaves complex groups for review', async () => {
     component.ngOnInit();component.groups=[display(1),display(3)];component.hasScanned.set(true);

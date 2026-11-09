@@ -165,11 +165,22 @@ public class CatalogueReconciliationService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public QuickMergeResult quickMerge(long libraryId, List<Long> bookIds, long targetBookId) {
+        return quickMergeWithDecision(libraryId, bookIds, targetBookId, false);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public QuickMergeResult confirmIdentityAndMerge(long libraryId, List<Long> bookIds, long targetBookId, boolean identityConfirmed) {
+        requireAdmin();
+        if (!identityConfirmed) throw ApiError.GENERIC_BAD_REQUEST.createException("Explicitly confirm the book identity before merging.");
+        return quickMergeWithDecision(libraryId, bookIds, targetBookId, true);
+    }
+
+    private QuickMergeResult quickMergeWithDecision(long libraryId, List<Long> bookIds, long targetBookId, boolean identityConfirmed) {
         BookLoreUser actor = requireAdmin();
         quarantine.lock();
         List<Long> ids = validateIds(bookIds, targetBookId);
         if (store.rows("book", "id", ids, true).size() != ids.size()) throw ApiError.CONFLICT.createException("Book records changed. Refresh this group before merging.");
-        Inspection inspection = inspect(libraryId, ids, targetBookId, true, false);
+        Inspection inspection = inspect(libraryId, ids, targetBookId, true, false, identityConfirmed);
         List<String> reasons = inspection.preview.reasons;
         if (!reasons.isEmpty()) return new QuickMergeResult("REVIEW_REQUIRED", null, inspection.preview, reasons);
         Receipt receipt = applyInspection(actor, libraryId, ids, targetBookId, inspection, inspection.preview.token);

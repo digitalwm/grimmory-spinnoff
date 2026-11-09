@@ -318,13 +318,21 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
       members: group.books.map(book => ({bookId:book.id,fileId:0,title:book.metadata?.title || '',authors:[],storedHash:null}))};
   }
 
-  async mergeGroup(group: DisplayGroup): Promise<void> {
+  canConfirmIdentity(group: DisplayGroup): boolean {
+    return !!group.reviewAssessment?.reviewReasons.some(reason =>
+      reason === 'Author identity is incomplete.' || reason === 'Titles or authors disagree. Resolve the metadata before merging.');
+  }
+
+  async mergeGroup(group: DisplayGroup, identityConfirmed = false): Promise<void> {
     if (this.isMerging() || this.catalogueMerging || this.disposed) return;
-    if (group.reviewAssessment) return;
+    if (identityConfirmed ? !this.canConfirmIdentity(group) : !!group.reviewAssessment) return;
     group.error = undefined;
     this.isMerging.set(true);
     try {
-      const result = await lastValueFrom(this.reconciliation.quickMerge(this.libraryId, this.catalogueGroup(group), group.selectedTargetBookId).pipe(takeUntil(this.destroy$)));
+      const request = identityConfirmed
+        ? this.reconciliation.confirmIdentityAndMerge(this.libraryId, this.catalogueGroup(group), group.selectedTargetBookId)
+        : this.reconciliation.quickMerge(this.libraryId, this.catalogueGroup(group), group.selectedTargetBookId);
+      const result = await lastValueFrom(request.pipe(takeUntil(this.destroy$)));
       if (result.status === 'MERGED' && result.receipt) {
         this.onReconciled(result.receipt);
         this.messageService.add({severity:'success',summary:this.t.translate('book.catalogueReconciliation.quickMerged'),detail:this.t.translate('book.catalogueReconciliation.receipt',{id:result.receipt.id})});

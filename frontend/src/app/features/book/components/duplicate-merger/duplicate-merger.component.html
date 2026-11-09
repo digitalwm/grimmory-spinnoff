@@ -160,6 +160,11 @@
                     severity="success"
                     (click)="mergeGroup(group)"
                     [disabled]="isMerging() || !!group.reviewAssessment" />
+                  @if (canConfirmIdentity(group)) {
+                    <p-button [label]="'book.catalogueReconciliation.sameAuthorMerge' | transloco"
+                      icon="pi pi-user-edit" size="small" severity="success"
+                      (click)="mergeGroup(group, true)" [disabled]="isMerging()" />
+                  }
                   <p-button [label]="(group.reviewAssessment || group.error ? 'book.catalogueReconciliation.resolveIssue' : 'book.catalogueReconciliation.inspect') | transloco" icon="pi pi-eye" size="small" severity="secondary" [outlined]="true" (click)="reviewGroup(group)" [disabled]="isMerging()" />
                   <p-button [label]="'book.catalogueReconciliation.notDuplicates' | transloco" icon="pi pi-ban" size="small" severity="secondary" (click)="notDuplicates(group)" [disabled]="isMerging()" />
                   @if (getDeleteSelectedCount(group) > 0) {

@@ -3675,6 +3675,7 @@
       "reviewGroup": "Review and reconcile",
       "range": "{{first}}–{{last}} of {{total}} groups",
       "quickMerge": "Merge",
+      "sameAuthorMerge": "Same book / author — merge into selected target",
       "quickMerged": "Group merged",
       "needsReview": "Merge blocked",
       "resolveIssue": "Resolve issue",

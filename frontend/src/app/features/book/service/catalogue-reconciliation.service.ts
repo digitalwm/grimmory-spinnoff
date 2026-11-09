@@ -98,6 +98,13 @@ export class CatalogueReconciliationService {
       else void this.queryClient.invalidateQueries({queryKey: bookQueryKeys.all()});
     }}));
   }
+  confirmIdentityAndMerge(libraryId: number, group: CatalogueGroup, targetBookId: number) {
+    return this.http.post<QuickMergeResult>(`${this.url}/confirm-identity-and-merge`, {
+      libraryId, bookIds: group.members.map(member => member.bookId), targetBookId, identityConfirmed: true,
+    }).pipe(tap(result => {
+      if (result.status === 'MERGED') void this.queryClient.invalidateQueries({queryKey: bookQueryKeys.all()});
+    }));
+  }
   merge(preview: CataloguePreview) {
     return this.http.post<CatalogueReceipt>(`${this.url}/merge`, {
       libraryId: preview.libraryId,

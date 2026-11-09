@@ -57,6 +57,13 @@ describe('CatalogueReconciliationService', () => {
     request.flush({status:'MERGED',receipt:{id:'receipt'},preview:null,reviewReasons:[]});expect(invalidate).toHaveBeenCalledTimes(1);
   });
 
+  it('sends an explicit human decision in a single request using the selected target',()=>{
+    service.confirmIdentityAndMerge(7,group,2).subscribe();
+    const request=http.expectOne(req=>req.url.endsWith('/confirm-identity-and-merge'));
+    expect(request.request.body).toEqual({libraryId:7,bookIds:[1,2],targetBookId:2,identityConfirmed:true});
+    request.flush({status:'REVIEW_REQUIRED',receipt:null,preview,reviewReasons:['Conflicting progress']});
+  });
+
   it('coalesces successful batch merges without invalidating library queries per group',()=>{
     const sockets=TestBed.inject(BookSocketService);const begin=vi.spyOn(sockets,'beginBatch');const end=vi.spyOn(sockets,'endBatch');
     const record=vi.spyOn(sockets,'recordCatalogueMerge');const invalidate=vi.spyOn(harness.queryClient,'invalidateQueries');

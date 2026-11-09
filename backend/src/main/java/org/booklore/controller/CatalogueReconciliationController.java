@@ -39,6 +39,12 @@ public class CatalogueReconciliationController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.quickMerge(request.libraryId, request.bookIds, request.targetBookId));
     }
 
+    @PostMapping("/confirm-identity-and-merge")
+    public ResponseEntity<CatalogueReconciliationService.QuickMergeResult> confirmIdentityAndMerge(@RequestBody @Valid InspectRequest request) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.confirmIdentityAndMerge(
+                request.libraryId, request.bookIds, request.targetBookId, request.identityConfirmed));
+    }
+
     public record ExcludeRequest(@NotNull Long libraryId,@NotEmpty @Size(min=2,max=20) List<@NotNull Long> bookIds, Long isolatedBookId) {}
     @PostMapping("/not-duplicates")
     public ResponseEntity<Void> exclude(@RequestBody @Valid ExcludeRequest request) {
