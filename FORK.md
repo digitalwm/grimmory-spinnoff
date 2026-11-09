@@ -110,6 +110,13 @@ Distinct files remain attached as alternatives; byte-identical copies use recove
 quarantine. Copies still referenced by other records stay in place. Matching titles
 elsewhere do not silently expand a direct merge. The selected default file remains
 preferred even if an attached file is older or the library format priority differs.
+If selected records reference the same physical path and one stored fingerprint
+matches the verified file, merging can reconcile stale fingerprints on the other
+references. The original values and repairs are archived in the receipt. Preview
+remains read-only. A matching fingerprint at a different path is insufficient;
+if all references disagree with the physical file, merging stays blocked.
+**Recheck files and merge** retries that group from the list without a full scan.
+
 Actual reading-data conflicts, identity disagreements, unverifiable files and
 unsupported device/proposal data still block the merge. Direct and reviewed merging
 share transaction, file verification, quarantine, rollback, and receipt logic.

@@ -65,7 +65,7 @@ public class CatalogueReconciliationService {
     private record FileCheck(String path, String sha256, String storedFingerprint, long bytes) {}
     private record Inspection(Preview preview, CatalogueReconciliationStore.Schema schema,
                               Map<String, List<Map<String, String>>> before, List<CatalogueReconciliationStore.Change> changes,
-                              List<FileRow> files, Map<Long, Long> fileTargets) {}
+                              List<FileRow> files, Map<Long, Long> fileTargets, Map<Long, String> fingerprintRepairs) {}
 
     @Transactional(readOnly = true)
     public Scan scan(long libraryId, int page, int size) {return scan(libraryId, page, size, null);}
@@ -243,7 +243,14 @@ public class CatalogueReconciliationService {
             for (FilePlan file : current.files) if (file.fileId == file.retainedFileId) CatalogueQuarantineService.verify(Path.of(file.path), file.sha256);
             for (var move : moves) CatalogueQuarantineService.verify(Path.of(move.quarantinePath()), move.sha256());
         } catch (Exception e) {throw ApiError.CONFLICT.createException("File content changed during reconciliation. The transaction was rolled back.");}
+        // Repair only retained catalogue cache entries, after full content verification.
+        // Original fingerprints remain in before_json, including removed shared references.
+        for (var repair : inspection.fingerprintRepairs.entrySet()) if (retainedFiles.contains(repair.getKey())) {
+            if (jdbc.update("UPDATE book_file SET current_hash=? WHERE id=?", repair.getValue(), repair.getKey()) != 1)
+                throw ApiError.CONFLICT.createException("The retained file record changed. No merge was applied.");
+        }
         Map<String, Object> after = new TreeMap<>(store.snapshot(inspection.schema, List.of(targetBookId), retainedFiles, true));
+        after.put("_fingerprint_repairs", inspection.fingerprintRepairs);
         after.put("_human_identity_confirmed",current.identityConfirmed);
         after.put("_file_plan", current.files); after.put("_quarantine", moves); after.put("_retention_days", quarantine.retentionDays());
         Instant completed = Instant.now();
@@ -383,11 +390,22 @@ public class CatalogueReconciliationService {
                     if (totalBytes > 1024L * 1024 * 1024) throw new IllegalStateException("This preview exceeds the 1 GiB content verification limit.");
                 }
                 checks.put(file.fileId, checked);
-                if (file.storedHash == null || !checked.storedFingerprint.equalsIgnoreCase(file.storedHash))
-                    reasons.add("A stored fingerprint no longer matches the physical file. Rescan and review it before merging.");
                 if (Files.isSymbolicLink(file.path()) || !Path.of(file.root).toAbsolutePath().normalize().equals(Path.of(file.root).toRealPath()))
                     reasons.add("Symbolic file paths require separate review before quarantine.");
             } catch (Exception e) {reasons.add(e.getMessage());}
+        }
+        Map<Long, String> fingerprintRepairs = new TreeMap<>();
+        for (FileRow file : files) {
+            FileCheck checked = checks.get(file.fileId);
+            if (checked == null || checked.storedFingerprint.equalsIgnoreCase(file.storedHash)) continue;
+            // Legacy catalogue records can share one path but carry different cached hashes.
+            // A selected reference to that exact verified physical path must already match.
+            // Matching bytes at a different path are insufficient evidence for this repair.
+            boolean verifiedReference = files.stream().anyMatch(peer -> peer.fileId != file.fileId
+                    && checks.containsKey(peer.fileId) && checked.path.equals(checks.get(peer.fileId).path)
+                    && checked.storedFingerprint.equalsIgnoreCase(peer.storedHash));
+            if (verifiedReference) fingerprintRepairs.put(file.fileId, checked.storedFingerprint);
+            else reasons.add("A stored fingerprint no longer matches the physical file. No selected reference to this same path has a matching fingerprint; inspect the changed file before merging.");
         }
         Map<Long, Long> fileTargets = new TreeMap<>();
         Map<String, FileRow> survivors = new HashMap<>();
@@ -433,7 +451,7 @@ public class CatalogueReconciliationService {
         for (FileRow file : files) if (members.stream().noneMatch(member -> member.bookId == file.bookId)) members.add(member(file, authors.getOrDefault(file.bookId, List.of())));
         Preview preview = new Preview(libraryId, targetBookId, members, anchor.path, anchor.sha256, totalBytes,
                 reasons.isEmpty(), reasons.stream().distinct().toList(), related, differences, token, plans, quarantine.retentionDays(), identityConfirmed);
-        return new Inspection(preview, schema, before, changes, files, fileTargets);
+        return new Inspection(preview, schema, before, changes, files, fileTargets, fingerprintRepairs);
     }
 
     private void checkExternalReferences(List<FilePlan> plans, List<Long> selectedFiles, List<String> reasons) {

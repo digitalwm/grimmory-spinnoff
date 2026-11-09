@@ -323,6 +323,16 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
       reason === 'Author identity is incomplete.' || reason === 'Titles or authors disagree. Resolve the metadata before merging.');
   }
 
+  canRecheckFiles(group: DisplayGroup): boolean {
+    return !!group.reviewAssessment?.reviewReasons.some(reason => reason.startsWith('A stored fingerprint no longer matches'));
+  }
+
+  async recheckFiles(group: DisplayGroup): Promise<void> {
+    if (this.isMerging() || this.catalogueMerging || this.disposed || !this.canRecheckFiles(group)) return;
+    group.reviewAssessment = undefined;
+    await this.mergeGroup(group);
+  }
+
   async mergeGroup(group: DisplayGroup, identityConfirmed = false): Promise<void> {
     if (this.isMerging() || this.catalogueMerging || this.disposed) return;
     if (identityConfirmed ? !this.canConfirmIdentity(group) : !!group.reviewAssessment) return;

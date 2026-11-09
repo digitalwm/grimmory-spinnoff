@@ -150,6 +150,20 @@ describe('DuplicateMergerComponent', () => {
     expect(component.canConfirmIdentity(group)).toBe(false);expect(group.dismissed).toBe(false);expect(component.mode).toBe('formats');
     await component.mergeGroup(group,true);expect(reconciliation.confirmIdentityAndMerge).toHaveBeenCalledTimes(1);
   });
+  it('rechecks a fingerprint-blocked group inline without another scan or confirmation',async()=>{
+    component.ngOnInit();const group=display(1);component.groups=[group];
+    reconciliation.quickMerge.mockReturnValueOnce(of({...review,reviewReasons:['A stored fingerprint no longer matches the physical file. Rescan and review it before merging.']})).mockReturnValueOnce(of(merged));
+    await component.mergeGroup(group);expect(component.canRecheckFiles(group)).toBe(true);
+    await component.recheckFiles(group);expect(reconciliation.quickMerge).toHaveBeenCalledTimes(2);
+    expect(group.dismissed).toBe(true);expect(component.mode).toBe('formats');
+    expect(bookFileService.findDuplicates).not.toHaveBeenCalled();expect(confirmationService.confirm).not.toHaveBeenCalled();
+  });
+  it('keeps an unresolved file mismatch blocked after rechecking',async()=>{
+    component.ngOnInit();const group=display(1);component.groups=[group];
+    const blocked:QuickMergeResult={...review,reviewReasons:['A stored fingerprint no longer matches the physical file. No selected reference to this same path has a matching fingerprint; inspect the changed file before merging.']};
+    reconciliation.quickMerge.mockReturnValue(of(blocked));await component.mergeGroup(group);await component.recheckFiles(group);
+    expect(group.dismissed).toBe(false);expect(component.canRecheckFiles(group)).toBe(true);expect(component.mode).toBe('formats');
+  });
   it('checks a whole list after one batch confirmation and leaves complex groups for review', async () => {
     component.ngOnInit();component.groups=[display(1),display(3)];component.hasScanned.set(true);
     reconciliation.quickMerge.mockReturnValueOnce(of(merged)).mockReturnValueOnce(of(review));

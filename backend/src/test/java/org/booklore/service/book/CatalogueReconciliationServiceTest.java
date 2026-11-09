@@ -202,6 +202,42 @@ class CatalogueReconciliationServiceTest {
         assertEquals(1, service.scan(1, 0, 20).totalGroups());
         assertFalse(preview().eligible());
     }
+    @Test void sharedPathWithOneVerifiedReferenceRepairsStaleTargetOnlyWhenMergeCommits() throws Exception {
+        String actual=org.booklore.service.file.FileFingerprint.generateHash(file);
+        byte[] original=Files.readAllBytes(file);
+        jdbc.update("UPDATE book_file SET current_hash='stale-target' WHERE id=11");
+        var decision=preview();assertTrue(decision.eligible(),decision.reasons().toString());
+        assertEquals("stale-target",jdbc.queryForObject("SELECT current_hash FROM book_file WHERE id=11",String.class));
+        var result=quick(List.of(1L,2L),1);assertEquals("MERGED",result.status());
+        assertEquals(actual,jdbc.queryForObject("SELECT current_hash FROM book_file WHERE id=11",String.class));
+        assertEquals(1,count("book_file"));assertArrayEquals(original,Files.readAllBytes(file));assertEquals(0,count("catalogue_quarantine"));
+        assertTrue(jdbc.queryForObject("SELECT before_json FROM catalogue_reconciliation_audit",String.class).contains("stale-target"));
+        assertTrue(jdbc.queryForObject("SELECT after_json FROM catalogue_reconciliation_audit",String.class).contains("_fingerprint_repairs"));
+    }
+    @Test void staleOrMissingSourceFingerprintCanUseTheVerifiedSharedPathWithoutTouchingBytes() throws Exception {
+        String actual=org.booklore.service.file.FileFingerprint.generateHash(file);
+        jdbc.update("UPDATE book_file SET current_hash=NULL WHERE id=22");
+        assertEquals("MERGED",quick(List.of(1L,2L),1).status());
+        assertEquals(actual,jdbc.queryForObject("SELECT current_hash FROM book_file WHERE id=11",String.class));
+        assertTrue(Files.exists(file));assertEquals(0,count("catalogue_quarantine"));
+    }
+    @Test void matchingFingerprintAtAnotherPhysicalPathCannotAuthorizeAStaleFingerprintRepair() throws Exception {
+        Files.copy(file,folder.resolve("copy.epub"));jdbc.update("UPDATE book_file SET file_name='copy.epub',current_hash='stale-copy' WHERE id=22");
+        var result=quick(List.of(1L,2L),1);assertEquals("REVIEW_REQUIRED",result.status());
+        assertEquals(2,count("book"));assertEquals(0,count("catalogue_reconciliation_audit"));
+        assertEquals("stale-copy",jdbc.queryForObject("SELECT current_hash FROM book_file WHERE id=22",String.class));
+    }
+    @Test void sharedPathRepairCannotBypassReadingConflictsOrAChangedTrustedReference() {
+        jdbc.update("UPDATE book_file SET current_hash='stale-target' WHERE id=11");
+        var decision=preview();assertTrue(decision.eligible());
+        jdbc.update("UPDATE book_file SET current_hash='now-also-stale' WHERE id=22");
+        assertThrows(APIException.class,()->merge(decision));assertEquals(2,count("book"));
+        jdbc.update("UPDATE book_file SET current_hash=? WHERE id=22",org.booklore.service.file.FileFingerprint.generateHash(file));
+        jdbc.update("INSERT INTO user_book_progress VALUES(101,1,8,'one'),(102,2,8,'two')");
+        assertEquals("REVIEW_REQUIRED",quick(List.of(1L,2L),1).status());
+        assertEquals("stale-target",jdbc.queryForObject("SELECT current_hash FROM book_file WHERE id=11",String.class));
+    }
+
     @Test void matchingStoredHashesAreNotEnoughIfThePhysicalFingerprintHasDrifted() {
         jdbc.update("UPDATE book_file SET current_hash='outdated-for-both-records'");
         var preview = preview();

@@ -160,6 +160,11 @@
                     severity="success"
                     (click)="mergeGroup(group)"
                     [disabled]="isMerging() || !!group.reviewAssessment" />
+                  @if (canRecheckFiles(group)) {
+                    <p-button [label]="'book.catalogueReconciliation.recheckFilesMerge' | transloco"
+                      icon="pi pi-refresh" size="small" severity="secondary"
+                      (click)="recheckFiles(group)" [disabled]="isMerging()" />
+                  }
                   @if (canConfirmIdentity(group)) {
                     <p-button [label]="'book.catalogueReconciliation.sameAuthorMerge' | transloco"
                       icon="pi pi-user-edit" size="small" severity="success"
