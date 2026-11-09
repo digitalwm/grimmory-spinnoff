@@ -93,11 +93,7 @@ public class DuplicateDetectionService {
             // agreement before allowing an ISBN collision to consume unrelated records.
             Map<Long, Set<String>> authors = new HashMap<>();
             for (BookEntity book : candidates) {
-                Set<String> names = book.getMetadata().getAuthors() == null ? Set.of()
-                        : book.getMetadata().getAuthors().stream().map(AuthorEntity::getName)
-                        .filter(Objects::nonNull).map(BookUtils::normalizeForSearch)
-                        .filter(name -> name != null && !name.isBlank()).collect(Collectors.toSet());
-                authors.put(book.getId(), names);
+                authors.put(book.getId(), identityAuthors(book));
             }
             Map<Long, Long> parent = new HashMap<>();
             Map<String, Long> firstByAuthor = new HashMap<>();
@@ -137,17 +133,23 @@ public class DuplicateDetectionService {
             parent.put(book.getId(), book.getId());
         }
 
-        Map<String, Long> idToBook = new HashMap<>();
+        Map<String, List<BookEntity>> booksByExternalId = new HashMap<>();
         for (BookEntity book : candidates) {
             BookMetadataEntity meta = book.getMetadata();
             String title = BookUtils.normalizeForSearch(meta.getTitle());
             if (title == null || title.isBlank()) continue;
             List<String> externalIds = extractExternalIds(meta).stream().map(id -> id + "\n" + title).toList();
             for (String extId : externalIds) {
-                if (idToBook.containsKey(extId)) {
-                    union(parent, book.getId(), idToBook.get(extId));
-                } else {
-                    idToBook.put(extId, book.getId());
+                booksByExternalId.computeIfAbsent(extId, ignored -> new ArrayList<>()).add(book);
+            }
+        }
+        for (List<BookEntity> matchingExternalId : booksByExternalId.values()) {
+            for (int i = 0; i < matchingExternalId.size(); i++) {
+                for (int j = i + 1; j < matchingExternalId.size(); j++) {
+                    BookEntity first = matchingExternalId.get(i);
+                    BookEntity second = matchingExternalId.get(j);
+                    if (externalIdAuthorsConflict(first, second)) continue;
+                    union(parent, first.getId(), second.getId());
                 }
             }
         }
@@ -221,19 +223,14 @@ public class DuplicateDetectionService {
             if (group.size() < 2) continue;
 
             List<BookEntity> withAuthors = group.stream()
-                    .filter(b -> b.getMetadata().getAuthors() != null && !b.getMetadata().getAuthors().isEmpty())
+                    .filter(b -> !identityAuthors(b).isEmpty())
                     .toList();
 
             if (withAuthors.size() < 2) continue;
 
             Map<Long, Set<String>> normalizedAuthors = new HashMap<>();
             for (BookEntity book : withAuthors) {
-                Set<String> names = book.getMetadata().getAuthors().stream()
-                        .map(AuthorEntity::getName)
-                        .filter(Objects::nonNull)
-                        .map(BookUtils::normalizeForSearch)
-                        .collect(Collectors.toSet());
-                normalizedAuthors.put(book.getId(), names);
+                normalizedAuthors.put(book.getId(), identityAuthors(book));
             }
 
             Map<Long, Long> parent = new HashMap<>();
@@ -241,11 +238,14 @@ public class DuplicateDetectionService {
                 parent.put(book.getId(), book.getId());
             }
 
-            Map<String, Long> firstByAuthor = new HashMap<>();
-            for (BookEntity book : withAuthors) {
-                for (String author : normalizedAuthors.get(book.getId())) {
-                    Long first = firstByAuthor.putIfAbsent(author, book.getId());
-                    if (first != null) union(parent, book.getId(), first);
+            // One shared contributor in a large anthology should not connect all
+            // books with a generic title (for example, the Star Wars franchise).
+            for (int i = 0; i < withAuthors.size(); i++) {
+                for (int j = i + 1; j < withAuthors.size(); j++) {
+                    BookEntity first = withAuthors.get(i);
+                    BookEntity second = withAuthors.get(j);
+                    if (authorsAreSimilar(normalizedAuthors.get(first.getId()), normalizedAuthors.get(second.getId())))
+                        union(parent, first.getId(), second.getId());
                 }
             }
 
@@ -263,6 +263,34 @@ public class DuplicateDetectionService {
         }
 
         return result;
+    }
+
+    private Set<String> identityAuthors(BookEntity book) {
+        BookMetadataEntity metadata = book.getMetadata();
+        String title = BookUtils.normalizeForSearch(metadata == null ? null : metadata.getTitle());
+        if (metadata == null || metadata.getAuthors() == null) return Set.of();
+        return metadata.getAuthors().stream().map(AuthorEntity::getName).filter(Objects::nonNull)
+                .map(BookUtils::normalizeForSearch).filter(name -> name != null && !name.isBlank())
+                // Imported publisher or franchise labels sometimes appear as author values.
+                .filter(name -> !name.equals(title)).collect(Collectors.toSet());
+    }
+
+    private boolean externalIdAuthorsConflict(BookEntity first, BookEntity second) {
+        List<AuthorEntity> firstAuthors = first.getMetadata().getAuthors();
+        List<AuthorEntity> secondAuthors = second.getMetadata().getAuthors();
+        boolean firstHasAuthors = firstAuthors != null && firstAuthors.stream().anyMatch(author -> author.getName() != null && !author.getName().isBlank());
+        boolean secondHasAuthors = secondAuthors != null && secondAuthors.stream().anyMatch(author -> author.getName() != null && !author.getName().isBlank());
+        if (!firstHasAuthors || !secondHasAuthors) return false;
+        Set<String> firstIdentity = identityAuthors(first);
+        Set<String> secondIdentity = identityAuthors(second);
+        return !authorsAreSimilar(firstIdentity, secondIdentity);
+    }
+
+    private boolean authorsAreSimilar(Set<String> first, Set<String> second) {
+        if (first.isEmpty() || second.isEmpty()) return false;
+        long shared = first.stream().filter(second::contains).count();
+        long total = first.size() + second.size() - shared;
+        return shared > 0 && shared * 2 >= total;
     }
 
     private List<DuplicateGroup> findByDirectory(List<BookEntity> books, Set<Long> alreadyGrouped, List<BookFileType> formatPriority) {
