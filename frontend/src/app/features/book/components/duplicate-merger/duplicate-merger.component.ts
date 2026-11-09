@@ -19,6 +19,7 @@ import {UrlHelperService} from '../../../../shared/service/url-helper.service';
 import {AppSettingsService} from '../../../../shared/service/app-settings.service';
 import {CatalogueGroup, CatalogueReceipt, CatalogueReconciliationService, QuickMergeResult} from '../../service/catalogue-reconciliation.service';
 import {CatalogueReconciliationComponent} from '../catalogue-reconciliation/catalogue-reconciliation.component';
+import {BookDialogHelperService} from '../../service/book-dialog-helper.service';
 
 type PresetMode = 'strict' | 'balanced' | 'aggressive' | 'custom';
 
@@ -28,6 +29,7 @@ interface DisplayGroup extends DuplicateGroup {
   selectedForDeletion: Set<number>;
   reviewAssessment?: QuickMergeResult;
   error?: string;
+  detailsExpanded?: boolean;
 }
 
 @Component({
@@ -56,6 +58,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   private disposed = false;
   private readonly bookFileService = inject(BookFileService);
   private readonly bookService = inject(BookService);
+  private readonly bookDialogHelper = inject(BookDialogHelperService);
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly dialogRef = inject(DynamicDialogRef);
@@ -125,6 +128,12 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
+  toggleComparison(group: DisplayGroup): void {group.detailsExpanded = !group.detailsExpanded;}
+
+  refreshGroupMetadata(group: DisplayGroup): void {
+    void this.bookDialogHelper.openMetadataRefreshDialog(new Set(group.books.map(book => book.id)));
+  }
+
   onPresetChange(): void {
     if (this.presetMode !== 'custom') {
       this.applyPreset(this.presetMode);
@@ -186,6 +195,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
           selectedTargetBookId: g.suggestedTargetBookId,
           dismissed: false,
           selectedForDeletion: new Set<number>(),
+          detailsExpanded: false,
         }));
         this.isScanning.set(false);
         this.hasScanned.set(true);

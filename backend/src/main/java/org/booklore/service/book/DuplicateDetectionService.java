@@ -87,7 +87,40 @@ public class DuplicateDetectionService {
             }
         }
 
-        return buildGroups(isbnGroups, "ISBN", alreadyGrouped, formatPriority);
+        List<DuplicateGroup> result = new ArrayList<>();
+        for (List<BookEntity> candidates : isbnGroups.values()) {
+            // ISBNs are often copied onto the wrong book during imports. Require author
+            // agreement before allowing an ISBN collision to consume unrelated records.
+            Map<Long, Set<String>> authors = new HashMap<>();
+            for (BookEntity book : candidates) {
+                Set<String> names = book.getMetadata().getAuthors() == null ? Set.of()
+                        : book.getMetadata().getAuthors().stream().map(AuthorEntity::getName)
+                        .filter(Objects::nonNull).map(BookUtils::normalizeForSearch)
+                        .filter(name -> name != null && !name.isBlank()).collect(Collectors.toSet());
+                authors.put(book.getId(), names);
+            }
+            Map<Long, Long> parent = new HashMap<>();
+            Map<String, Long> firstByAuthor = new HashMap<>();
+            for (BookEntity book : candidates) {
+                if (authors.get(book.getId()).isEmpty()) continue;
+                parent.put(book.getId(), book.getId());
+                for (String author : authors.get(book.getId())) {
+                    Long first = firstByAuthor.putIfAbsent(author, book.getId());
+                    if (first != null) union(parent, book.getId(), first);
+                }
+            }
+            Map<Long, List<BookEntity>> authorGroups = new HashMap<>();
+            for (BookEntity book : candidates) {
+                if (!parent.containsKey(book.getId())) continue;
+                authorGroups.computeIfAbsent(find(parent, book.getId()), ignored -> new ArrayList<>()).add(book);
+            }
+            for (List<BookEntity> group : authorGroups.values()) {
+                if (group.size() < 2) continue;
+                group.forEach(book -> alreadyGrouped.add(book.getId()));
+                result.add(toDuplicateGroup(group, "ISBN", formatPriority));
+            }
+        }
+        return result;
     }
 
     private List<DuplicateGroup> findByExternalId(List<BookEntity> books, Set<Long> alreadyGrouped, List<BookFileType> formatPriority) {

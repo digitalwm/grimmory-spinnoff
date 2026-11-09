@@ -153,6 +153,12 @@
                   <p-tag [value]="t('sameFormatWarning')" severity="warn" icon="pi pi-exclamation-triangle" />
                 }
                 <div class="group-actions">
+                  <p-button [label]="(group.detailsExpanded ? 'book.duplicateMerger.hideComparison' : 'book.duplicateMerger.compareBooks') | transloco"
+                    icon="pi pi-images" size="small" severity="secondary" [outlined]="true"
+                    (click)="toggleComparison(group)" [disabled]="isMerging()" />
+                  <p-button [label]="'book.duplicateMerger.refreshGroupMetadata' | transloco"
+                    icon="pi pi-cloud-download" size="small" severity="secondary" [outlined]="true"
+                    (click)="refreshGroupMetadata(group)" [disabled]="isMerging()" />
                   <p-button
                     [label]="'book.catalogueReconciliation.quickMerge' | transloco"
                     icon="pi pi-check"
@@ -194,6 +200,24 @@
               </div>
               @if (group.reviewAssessment) {<p role="status">{{ 'book.catalogueReconciliation.needsReview' | transloco }}: {{ group.reviewAssessment.reviewReasons.join(' ') }}</p>}
               @if (group.error) {<p role="alert">{{ group.error }}</p>}
+              @if (group.detailsExpanded) {
+                <div class="duplicate-comparison">
+                  @for (book of group.books; track book.id) {
+                    <section class="comparison-book">
+                      <app-cover class="comparison-cover" [src]="urlHelper.getThumbnailUrl(book.id, book.metadata?.coverUpdatedOn)"
+                        [title]="book.metadata?.title" [authors]="book.metadata?.authors ?? []" size="lg" loading="lazy" />
+                      <div class="comparison-fields">
+                        <strong>{{ book.metadata?.title || ('book.fileAttacher.unknownTitle' | transloco) }}</strong>
+                        <span>{{ book.metadata?.authors?.join(', ') || '—' }}</span>
+                        <span>ISBN: {{ book.metadata?.isbn13 || book.metadata?.isbn10 || '—' }}</span>
+                        <span>{{ book.metadata?.publisher || '—' }} · {{ book.metadata?.publishedDate || '—' }}</span>
+                        <span>Goodreads: {{ book.metadata?.goodreadsId || '—' }} · Google: {{ book.metadata?.googleId || '—' }}</span>
+                        <span>{{ getBookFilePath(book) }}</span>
+                      </div>
+                    </section>
+                  }
+                </div>
+              }
               <div class="group-books">
                 @for (book of group.books; track book.id) {
                   <div class="book-row" [class.selected-target]="book.id === group.selectedTargetBookId" [class.marked-for-deletion]="group.selectedForDeletion.has(book.id)">
