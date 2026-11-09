@@ -126,9 +126,12 @@ continues through that list. Catalogue pagination uses the remaining row offset 
 local removals do not skip the next candidate. Explicit scanning refreshes the snapshot.
 
 ISBN matching normalizes separators and checks ISBN-10/13 check digits. Invalid or
-truncated publisher prefixes cannot create a group. ISBN and provider-ID matches
-also require the same normalized full title, so a copied identifier cannot combine
-different named volumes. File imports normalize valid ISBNs before storage instead
+truncated publisher prefixes cannot create a group. ISBN matches also require
+normalized author overlap, so a copied ISBN cannot combine different authors.
+The duplicate list can expand **Compare details** for larger covers and identifiers,
+or open a provider-aware **Refresh metadata** fetch for that group. ISBN and
+provider-ID matches also require the same normalized full title, so a copied
+identifier cannot combine different named volumes. File imports normalize valid ISBNs before storage instead
 of truncating hyphenated strings to the database column length. Existing invalid
 legacy values remain available for review and are ignored as matching evidence.
 
