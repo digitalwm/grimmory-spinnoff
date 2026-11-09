@@ -1,5 +1,7 @@
 package org.booklore.service.book;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.booklore.exception.ApiError;
 import org.booklore.model.entity.AuthorEntity;
@@ -16,6 +18,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.file.Files;
@@ -40,12 +44,26 @@ public class LibraryToolsService {
         try {
             SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
             requestFactory.setConnectTimeout(Duration.ofSeconds(3));
-            requestFactory.setReadTimeout(Duration.ofSeconds(150));
+            // The importer may retry a 60-second model request three times (plus backoff).
+            requestFactory.setReadTimeout(Duration.ofSeconds(240));
             return RestClient.builder().requestFactory(requestFactory).baseUrl(importerUrl)
                     .defaultHeader("X-Library-Tools-Key", internalApiKey).build()
                     .post().uri("/api/internal/library-tools/identity-assessment")
                     .contentType(MediaType.APPLICATION_JSON).body(Map.of("books", requestBooks))
                     .retrieve().body(Map.class);
+        } catch (RestClientResponseException e) {
+            String message = "";
+            try {
+                JsonNode body = new ObjectMapper().readTree(e.getResponseBodyAsString());
+                message = body.path("message").asText("");
+            } catch (Exception ignored) {
+                // Fall through to a status-only message if the importer response was not JSON.
+            }
+            if (message.isBlank()) message = "The book analysis service returned HTTP " + e.getStatusCode().value() + ".";
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, message);
+        } catch (ResourceAccessException e) {
+            throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT,
+                    "The book analysis service timed out. Try again, or select fewer books.");
         } catch (RestClientException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "The local book analysis service could not complete the identity check.");
         }
