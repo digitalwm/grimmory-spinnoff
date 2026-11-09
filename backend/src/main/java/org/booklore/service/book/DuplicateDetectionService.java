@@ -244,7 +244,8 @@ public class DuplicateDetectionService {
                 for (int j = i + 1; j < withAuthors.size(); j++) {
                     BookEntity first = withAuthors.get(i);
                     BookEntity second = withAuthors.get(j);
-                    if (authorsAreSimilar(normalizedAuthors.get(first.getId()), normalizedAuthors.get(second.getId())))
+                    if (authorsAreSimilar(normalizedAuthors.get(first.getId()), normalizedAuthors.get(second.getId()))
+                            && !hasConflictingBookIdentityDetails(first.getMetadata(), second.getMetadata()))
                         union(parent, first.getId(), second.getId());
                 }
             }
@@ -291,6 +292,24 @@ public class DuplicateDetectionService {
         long shared = first.stream().filter(second::contains).count();
         long total = first.size() + second.size() - shared;
         return shared > 0 && shared * 2 >= total;
+    }
+
+    private boolean hasConflictingBookIdentityDetails(BookMetadataEntity first, BookMetadataEntity second) {
+        String firstSubtitle = BookUtils.normalizeForSearch(first.getSubtitle());
+        String secondSubtitle = BookUtils.normalizeForSearch(second.getSubtitle());
+        if (hasValue(firstSubtitle) && hasValue(secondSubtitle) && !firstSubtitle.equals(secondSubtitle)) {
+            return true;
+        }
+
+        String firstSeries = BookUtils.normalizeForSearch(first.getSeriesName());
+        String secondSeries = BookUtils.normalizeForSearch(second.getSeriesName());
+        return hasValue(firstSeries) && firstSeries.equals(secondSeries)
+                && first.getSeriesNumber() != null && second.getSeriesNumber() != null
+                && Float.compare(first.getSeriesNumber(), second.getSeriesNumber()) != 0;
+    }
+
+    private boolean hasValue(String value) {
+        return value != null && !value.isBlank();
     }
 
     private List<DuplicateGroup> findByDirectory(List<BookEntity> books, Set<Long> alreadyGrouped, List<BookFileType> formatPriority) {
