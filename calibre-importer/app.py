@@ -1,4 +1,5 @@
 import json
+import hmac
 import os
 import threading
 import traceback
@@ -14,6 +15,7 @@ from grimmory_repair import (
     GRIMMORY_LOW_SCORE_THRESHOLD,
     config_status as grimmory_config_status,
     delete_books,
+    identify_duplicate_group,
     run_heuristic_fix,
     run_llm_fix,
     safe_float,
@@ -391,9 +393,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/internal/library-tools/identity-assessment":
+            configured_key = os.environ.get("LIBRARY_TOOLS_API_KEY", "")
+            supplied_key = self.headers.get("X-Library-Tools-Key", "")
+            if not configured_key or not hmac.compare_digest(configured_key, supplied_key):
+                self.send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "message": "Unauthorized internal request."})
+                return
+            if int(self.headers.get("Content-Length", "0") or "0") > 65536:
+                self.send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "message": "Internal assessment request is too large."})
+                return
         content_length = int(self.headers.get("Content-Length", "0") or "0")
         raw_body = self.rfile.read(content_length) if content_length else b""
         body = parse_json_body(raw_body)
+
+        if parsed.path == "/api/internal/library-tools/identity-assessment":
+            try:
+                result = identify_duplicate_group(body.get("books"))
+                status = HTTPStatus.OK if result.get("ok") else HTTPStatus.BAD_GATEWAY
+                self.send_json(status, result)
+            except Exception:
+                self.send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "message": "Book identity analysis failed."})
+            return
 
         if parsed.path == "/api/consolidation/scan":
             try:

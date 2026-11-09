@@ -20,6 +20,7 @@ import {AppSettingsService} from '../../../../shared/service/app-settings.servic
 import {CatalogueGroup, CatalogueReceipt, CatalogueReconciliationService, QuickMergeResult} from '../../service/catalogue-reconciliation.service';
 import {CatalogueReconciliationComponent} from '../catalogue-reconciliation/catalogue-reconciliation.component';
 import {BookDialogHelperService} from '../../service/book-dialog-helper.service';
+import {LibraryToolsService, LibraryIdentityAssessment} from '../../service/library-tools.service';
 
 type PresetMode = 'strict' | 'balanced' | 'aggressive' | 'custom';
 
@@ -30,6 +31,9 @@ interface DisplayGroup extends DuplicateGroup {
   reviewAssessment?: QuickMergeResult;
   error?: string;
   detailsExpanded?: boolean;
+  identityAssessment?: LibraryIdentityAssessment;
+  identityAssessmentError?: string;
+  identityAssessmentLoading?: boolean;
 }
 
 @Component({
@@ -59,6 +63,7 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
   private readonly bookFileService = inject(BookFileService);
   private readonly bookService = inject(BookService);
   private readonly bookDialogHelper = inject(BookDialogHelperService);
+  private readonly libraryTools = inject(LibraryToolsService);
   private readonly messageService = inject(MessageService);
   private readonly confirmationService = inject(ConfirmationService);
   private readonly dialogRef = inject(DynamicDialogRef);
@@ -126,6 +131,33 @@ export class DuplicateMergerComponent implements OnInit, OnDestroy {
     this.disposed = true; this.stopRequested.set(true);
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  canAssessIdentity(group: DisplayGroup): boolean {
+    return group.books.length >= 2 && group.books.length <= 6
+      && group.books.every(book => ['PDF', 'EPUB'].includes((book.primaryFile?.bookType || '').toUpperCase()));
+  }
+
+  async assessIdentity(group: DisplayGroup): Promise<void> {
+    if (group.identityAssessmentLoading || !this.canAssessIdentity(group) || this.disposed) return;
+    group.identityAssessmentLoading = true;
+    group.identityAssessmentError = undefined;
+    group.identityAssessment = undefined;
+    try {
+      group.identityAssessment = await lastValueFrom(this.libraryTools.assessBookIdentity(group.books.map(book => book.id)).pipe(takeUntil(this.destroy$)));
+    } catch (err: any) {
+      group.identityAssessmentError = err?.error?.message || this.t.translate('book.duplicateMerger.identityAssessmentFailed');
+    } finally {group.identityAssessmentLoading = false;}
+  }
+
+  formatIdentityVerdict(verdict: string): string {
+    return verdict.replaceAll('_', ' ');
+  }
+
+  identityConfidence(value: number): number {return Math.round(value * 100);}
+
+  getBookTitle(bookId: number, group: DisplayGroup): string {
+    return group.books.find(book => book.id === bookId)?.metadata?.title || '';
   }
 
   toggleComparison(group: DisplayGroup): void {group.detailsExpanded = !group.detailsExpanded;}

@@ -291,3 +291,15 @@ the entire upstream test suite or every importer workflow has been exercised.
 OpenAI Codex assisted with implementation, investigation, tests, deployment checks,
 and repository setup for these local changes. Original upstream commits retain their
 own attribution and history. See `AI_POLICY.md` for the retained contribution policy.
+
+
+## Library tools: duplicate identity assessment
+
+The duplicate list can ask the configured language model to compare between two
+and six selected PDF/EPUB records. Grimmory's admin-only API selects their primary
+files and sends current catalogue details plus up to ten opening PDF pages or EPUB
+spine sections to the Calibre importer over the private Compose network. The
+importer calls the configured OpenAI-compatible model endpoint and returns suggested
+identities with page/section excerpts. It never writes metadata or merges records.
+The internal endpoint uses a private service key; the model key stays in the
+importer, outside the browser.

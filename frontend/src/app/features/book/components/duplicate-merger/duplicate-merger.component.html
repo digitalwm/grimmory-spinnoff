@@ -153,6 +153,10 @@
                   <p-tag [value]="t('sameFormatWarning')" severity="warn" icon="pi pi-exclamation-triangle" />
                 }
                 <div class="group-actions">
+                  <p-button [label]="'book.duplicateMerger.askAiIdentity' | transloco"
+                    icon="pi pi-sparkles" size="small" severity="info" [outlined]="true"
+                    (click)="assessIdentity(group)" [loading]="!!group.identityAssessmentLoading"
+                    [disabled]="isMerging() || !canAssessIdentity(group)" />
                   <p-button [label]="(group.detailsExpanded ? 'book.duplicateMerger.hideComparison' : 'book.duplicateMerger.compareBooks') | transloco"
                     icon="pi pi-images" size="small" severity="secondary" [outlined]="true"
                     (click)="toggleComparison(group)" [disabled]="isMerging()" />
@@ -200,6 +204,26 @@
               </div>
               @if (group.reviewAssessment) {<p role="status">{{ 'book.catalogueReconciliation.needsReview' | transloco }}: {{ group.reviewAssessment.reviewReasons.join(' ') }}</p>}
               @if (group.error) {<p role="alert">{{ group.error }}</p>}
+              @if (group.identityAssessment) {
+                <section class="identity-assessment" aria-live="polite">
+                  <strong>{{ 'book.duplicateMerger.identityAssessment' | transloco }}</strong>
+                  <p>{{ 'book.duplicateMerger.identityAssessmentPrivacy' | transloco }}</p>
+                  <p>{{ group.identityAssessment.summary }}</p>
+                  <div class="identity-results">
+                    @for (item of group.identityAssessment.books; track item.id) {
+                      <article>
+                        <strong>#{{ item.id }} · {{ item.title || getBookTitle(item.id, group) }}</strong>
+                        <span>{{ item.authors.join(', ') || '—' }} · {{ formatIdentityVerdict(item.verdict) }} · {{ identityConfidence(item.confidence) }}%</span>
+                        @if (item.sampleNote) {<small>{{ item.sampleNote }}</small>}
+                        @for (evidence of item.evidence; track $index) {
+                          <small>{{ evidence.location }}: “{{ evidence.quote }}”</small>
+                        }
+                      </article>
+                    }
+                  </div>
+                </section>
+              }
+              @if (group.identityAssessmentError) {<p role="alert">{{ group.identityAssessmentError }}</p>}
               @if (group.detailsExpanded) {
                 <div class="duplicate-comparison">
                   @for (book of group.books; track book.id) {
