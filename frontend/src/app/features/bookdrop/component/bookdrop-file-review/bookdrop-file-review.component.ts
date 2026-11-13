@@ -592,22 +592,15 @@ export class BookdropFileReviewComponent implements OnInit {
           return;
         }
 
-        if (failedIds.size > 0) {
-          this.bookdropFileUis = this.bookdropFileUis
-            .filter(fileUi => !successfulIds.has(fileUi.file.id))
-            .map(fileUi => {
-              if (failedIds.has(fileUi.file.id)) {
-                fileUi.selected = true;
-                this.fileUiCache[fileUi.file.id] = fileUi;
-              }
-              return fileUi;
-            });
-          this.totalRecords = Math.max(0, this.totalRecords - successfulIds.size);
-          this.bookdropFileUis.forEach(fileUi => this.fileUiCache[fileUi.file.id] = fileUi);
-          this.changeDetector.markForCheck();
-        } else {
-          this.loadPage(this.currentPage);
-        }
+        // Keep failed files selected in the cache, then reload the current
+        // server page. This removes completed files and fills the page with
+        // the next pending files without a browser refresh or losing the
+        // library/path choices held by this component.
+        failedIds.forEach(id => {
+          const failedFile = this.fileUiCache[id];
+          if (failedFile) failedFile.selected = true;
+        });
+        this.loadPage(this.currentPage);
       },
       error: (err) => {
         const completionAlreadyReported = this.progressCompletionHandled;
