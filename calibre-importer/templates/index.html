@@ -337,30 +337,37 @@
         if (job.running) setTimeout(pollPrepareStatus, 1200);
         else {
           if (autoImportAfterPrepare) {
-            autoImportAfterPrepare = false;
-            autoImportIds = [];
-            await new Promise(resolve => setTimeout(resolve, 1200));
             const importResponse = await fetch("/api/consolidation/import-status", {cache:"no-store"});
             const importJob = await importResponse.json();
             if (job.autoImportError) {
+              autoImportAfterPrepare = false;
+              autoImportIds = [];
               preparePolling = false;
               document.getElementById("consolidationScan").disabled = false;
               consolidationMessage.textContent = `Preparation complete: ${job.autoImportHeld} held for review; auto-import could not start: ${job.autoImportError}`;
               await loadConsolidationPage();
               return;
             }
-            if (importJob.running) {
+            const importMatchesBatch = (importJob.ids || []).some(id => autoImportIds.includes(id));
+            if (importMatchesBatch && (importJob.running || importJob.result)) {
               consolidationMessage.textContent = `Preparation complete: ${job.autoImportHeld} held for review; importing ${job.autoImportEligible} qualifying books.`;
-              pollImportStatus();
+              pollImportStatus([...autoImportIds]);
               return;
             }
             if (!job.autoImportEligible) {
+              autoImportAfterPrepare = false;
+              autoImportIds = [];
               preparePolling = false;
               document.getElementById("consolidationScan").disabled = false;
               consolidationMessage.textContent = `Preparation complete: ${job.autoImportHeld} book(s) held for review; none met the 50% confidence threshold with complete metadata.`;
               await loadConsolidationPage();
               return;
             }
+            // Preparation reports complete just before the background importer
+            // publishes its job state. Keep polling instead of dropping the
+            // batch selection during that short handoff window.
+            setTimeout(pollPrepareStatus, 300);
+            return;
           }
           const completedIds = autoImportAfterPrepare ? [...autoImportIds] : [...consolidationSelected];
           if (completedIds.length && !job.autoImport) {
@@ -425,16 +432,24 @@
           pollImportStatus();
         } catch (error) { consolidationMessage.textContent = error.message; }
       });
-      async function pollImportStatus() {
+      async function pollImportStatus(selectionIds = null) {
         try {
           const response = await fetch("/api/consolidation/import-status", {cache:"no-store"});
           const job = await response.json();
           consolidationMessage.textContent = `${job.message}: ${job.processed} / ${job.total} · ${job.moved} moved · ${job.failed} failed`;
-          if (job.running) { setTimeout(pollImportStatus, 1000); return; }
+          if (job.running) { setTimeout(() => pollImportStatus(selectionIds), 1000); return; }
           preparePolling = false; document.getElementById("consolidationScan").disabled = false;
           const result = job.result || {};
           const retryIds = (result.failed || []).map(item => item.id).filter(Boolean);
-          if (!consolidationSelected.size) for (const id of retryIds) consolidationSelected.add(id);
+          if (selectionIds) {
+            const importedIds = new Set((result.imported || []).map(item => item.id));
+            consolidationSelected.clear();
+            for (const id of selectionIds) if (!importedIds.has(id)) consolidationSelected.add(id);
+            autoImportAfterPrepare = false;
+            autoImportIds = [];
+          } else if (!consolidationSelected.size) {
+            for (const id of retryIds) consolidationSelected.add(id);
+          }
           if (retryIds.length) {
             const detailsResponse = await fetch(`/api/consolidation/files?ids=${encodeURIComponent(retryIds.join(","))}`, {cache:"no-store"});
             const details = await detailsResponse.json();

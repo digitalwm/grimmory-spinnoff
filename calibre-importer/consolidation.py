@@ -427,6 +427,12 @@ def prepare_selected(ids: list[str], auto_import: bool = False) -> dict:
             selected = [(item_id, ITEMS.get(item_id)) for item_id in dict.fromkeys(ids)]
         if any(not item for _, item in selected):
             raise ValueError("Rescan the source; a selected item has expired.")
+        if auto_import:
+            # The UI waits for the importer job to appear after preparation.
+            # Clear the previous batch receipt so that handoff polling cannot
+            # mistake an old completed import for the batch just prepared.
+            IMPORT_STATE.update(running=False, ids=[], total=0, processed=0, moved=0, failed=0,
+                                message="Waiting for automatic import", result=None)
         PREPARE_STATE.update(running=True, ids=[item_id for item_id, _ in selected], total=len(selected), processed=0, prepared=0, needsReview=0, failed=0, autoImport=auto_import, autoImportEligible=0, autoImportHeld=0, autoImportError=None, message=f"Preparing with {LLM_MODEL}")
 
         def run() -> None:
