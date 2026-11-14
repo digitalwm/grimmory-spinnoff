@@ -93,7 +93,7 @@
       <div id="tab-consolidation" role="tabpanel" aria-labelledby="consolidationTabButton" hidden>
         <section class="panel consolidation-panel">
           <div class="panel-header"><div><p class="eyebrow">Library consolidation</p><h2>Collect legacy books into Grimmory</h2></div><span id="consolidationSummary" class="muted">Not scanned</span></div>
-          <p class="muted">Scans <code>/data/epub</code>, <code>/data/epub_clean</code>, and <code>/data/epub-managed/managed-library</code> for EPUB, PDF, MOBI, AZW, FB2, and CBZ/CBR/CB7 files. Imports rename files to “Author - Title” using your approved metadata. Select up to 500 for LLM preparation and automatic import. The table renders 100 rows at a time; “Select current page” applies to the whole page. Approved files move into Grimmory BookDrop for final library review. Failed imports leave the source in place.</p>
+          <p class="muted">Scans <code>/data/epub</code>, <code>/data/epub_clean</code>, and <code>/data/epub-managed/managed-library</code> for EPUB, PDF, MOBI, AZW, FB2, and CBZ/CBR/CB7 files. Imports rename files to “Author - Title” using your approved metadata. Select up to 500 for preparation, approval, and import. The table renders 100 rows at a time; “Select current page” applies to the whole page size, even when only some rows are visible. Approved files move into Grimmory BookDrop for final library review. Failed imports leave the source in place.</p>
           <div class="actions">
             <button id="consolidationScan" class="button secondary">Scan source folders</button>
             <label class="batch-control"><span>Items per page</span><select id="consolidationPageSize"><option>10</option><option selected>25</option><option>50</option><option>100</option><option>500</option></select></label>
@@ -104,7 +104,7 @@
             <button id="deleteLegacySelectionButton" class="button danger" disabled>Delete selected from source</button>
             <button id="consolidationPrev" class="button ghost" disabled>Previous</button>
             <button id="consolidationNext" class="button ghost" disabled>Next</button>
-            <span id="consolidationSelection" class="muted">0 selected (max 100 per batch)</span>
+            <span id="consolidationSelection" class="muted">0 selected (max 500 to prepare or import; max 100 to delete)</span>
           </div>
           <p id="consolidationMessage" class="muted" role="status"></p>
           <div class="table-wrap"><table><thead><tr><th></th><th>Source</th><th>Book file</th><th>Current metadata</th><th>LLM proposal (editable)</th><th>Confidence / note</th></tr></thead>
@@ -201,14 +201,14 @@
 
       function syncConsolidationActions() {
         const count = consolidationSelected.size;
-        document.getElementById("consolidationSelection").textContent = `${count} selected (up to 500 for prepare + auto-import)`;
+        document.getElementById("consolidationSelection").textContent = `${count} selected (up to 500 to prepare or import; up to 100 to delete)`;
         consolidationPrepare.disabled = count === 0 || count > 500 || preparePolling;
         consolidationPrepareImport.disabled = count === 0 || count > 500 || preparePolling;
         const importable = [...consolidationSelected].every(id => {
           const data = consolidationMetadata.get(id);
           return data && data.sourceAvailable !== false && data.sourceHash && data.title.trim() && data.authors.trim();
         });
-        consolidationImport.disabled = count === 0 || count > 100 || !importable || preparePolling;
+        consolidationImport.disabled = count === 0 || count > 500 || !importable || preparePolling;
         document.getElementById("deleteLegacySelectionButton").disabled = count === 0 || count > 100 || preparePolling;
         const pageIds = consolidationRows.map(item => item.id);
         document.getElementById("selectVisibleConsolidation").textContent = pageIds.length && pageIds.every(id => consolidationSelected.has(id)) ? "Clear current page" : "Select current page";
@@ -414,7 +414,7 @@
       }
       consolidationImport.addEventListener("click", async () => {
         const books = [...consolidationSelected].map(id => ({id, ...consolidationMetadata.get(id)}));
-        if (!books.length || books.length > 100) return;
+        if (!books.length || books.length > 500) return;
         if (!confirm(`Approve the displayed titles and authors, rename the files to Author - Title, then move verified books into Grimmory BookDrop? Each source file is removed only after its verified BookDrop file is in place.`)) return;
         consolidationImport.disabled = true; consolidationMessage.textContent = "Writing metadata and moving verified books into Grimmory BookDrop…";
         try {
