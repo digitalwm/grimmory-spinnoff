@@ -768,7 +768,7 @@
 
       async function loadScanResult() {
         const response = await fetch("/api/grimmory/scan-result", { cache: "no-store" });
-        if (response.status === 404) return;
+        if (response.status === 204) return;
         const data = await response.json();
         renderGrimmoryRepair(data);
       }

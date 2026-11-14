@@ -306,7 +306,8 @@ class Handler(BaseHTTPRequestHandler):
             with STATE_LOCK:
                 payload = LAST_SCAN_RESULT
             if payload is None:
-                self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "message": "No completed scan is available."})
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self.end_headers()
             else:
                 self.send_json(HTTPStatus.OK, payload)
             return
